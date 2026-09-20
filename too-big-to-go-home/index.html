@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Too Big To Go Home — generative rebuild (v35)</title>
+<title>Too Big To Go Home — generative rebuild (v36)</title>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -84,7 +84,7 @@
   </figure>
   <figure class="panel" id="art-panel" style="margin:0">
     <div id="sketch-holder"></div>
-    <figcaption>Re-creation &middot; v35</figcaption>
+    <figcaption>Re-creation &middot; v36</figcaption>
   </figure>
 </div>
 <script>
@@ -1731,6 +1731,7 @@ function drawAcacia(tx, ty, s) {
    ------------------------------------------------------------------ */
 const GIANT_X = 191, GIANT_Y = 498, GIANT_W = 601, GIANT_H = 779;
 let giantShadowG = null;
+let giantOcclusionG = null;
 // separable box blur on a graphics' pixels (p5's filter(BLUR) needs WebGL;
 // this keeps the shadow working everywhere, including headless renders)
 function boxBlur2D(g, radius) {
@@ -1773,9 +1774,9 @@ function boxBlur2D(g, radius) {
   g.updatePixels();
 }
 function buildGiantShadow() {
-  if (giantShadowG || !giantImg) return;
+  if ((giantShadowG && giantOcclusionG) || !giantImg) return;
   const pad = 60;
-  // 1) the cutout mask, reflected: flipped vertically like a mirror image
+  // ---- cast pool: the reflected silhouette, cooled, fits the sand strip ----
   const sh = createGraphics(GIANT_W + pad * 2, GIANT_H + pad * 2);
   sh.pixelDensity(1);
   sh.push();
@@ -1784,16 +1785,12 @@ function buildGiantShadow() {
   sh.imageMode(CORNER);
   sh.image(giantImg, pad, pad, GIANT_W, GIANT_H);
   sh.pop();
-  // silhouette: dark warm umber, keep the cutout's alpha
   sh.loadPixels();
   const px = sh.pixels;
   for (let i = 0; i < px.length; i += 4) {
-    px[i] = 80; px[i + 1] = 55; px[i + 2] = 32;
+    px[i] = 88; px[i + 1] = 71; px[i + 2] = 56;  // cooled dark sand, not black
   }
   sh.updatePixels();
-  // 2) fit the frame: the sand strip between the feet (y~1276) and the
-  // title plaque (y=1342) is only ~66px, so the reflection is scaled to
-  // end (fully faded) just above the plaque -- nothing hides behind it
   const hScale = 0.069;
   const fw = GIANT_W + pad * 2;
   const fh = Math.round((GIANT_H + pad * 2) * hScale);
@@ -1804,12 +1801,12 @@ function buildGiantShadow() {
   sh.remove();
   boxBlur2D(fin, 7);
   boxBlur2D(fin, 7);
-  // 3) distance fade at final scale: strongest at the feet, gone at the far end
+  // distance fade: dark near the figure, gone before the title plaque
   const mg = createGraphics(fw, fh);
   mg.pixelDensity(1);
   const mctx = mg.drawingContext;
   const grad = mctx.createLinearGradient(0, 0, 0, fh);
-  grad.addColorStop(0, "rgba(0,0,0,1)");
+  grad.addColorStop(0, "rgba(0,0,0,0.95)");
   grad.addColorStop(1, "rgba(0,0,0,0)");
   mctx.fillStyle = grad;
   mctx.fillRect(0, 0, fw, fh);
@@ -1820,21 +1817,61 @@ function buildGiantShadow() {
   giantShadowG = fin;
   giantShadowG._pad = pad;
   giantShadowG._hScale = hScale;
+  // ---- occlusion core: the anti-floating layer ----
+  buildGiantOcclusion();
+}
+
+/* Occlusion shadow: the darkest value in the scene, hugging the exact
+   ground-contact line of the cutout (buttocks, feet) with no gap.
+   Darkest right at the contact, softening downward; a whisper of warm
+   sand-bounce just inside it. This is what makes the figure sit. */
+function buildGiantOcclusion() {
+  if (giantOcclusionG || !giantImg) return;
+  const tail = 34;
+  const oc = createGraphics(GIANT_W, GIANT_H + tail);
+  oc.pixelDensity(1);
+  giantImg.loadPixels();
+  const ip = giantImg.pixels, iw = giantImg.width, ih = giantImg.height;
+  const sx = GIANT_W / iw, sy = GIANT_H / ih;
+  const octx = oc.drawingContext;
+  for (let cx = 0; cx < GIANT_W; cx++) {
+    const ix = Math.min(iw - 1, Math.floor(cx / sx));
+    let iy = -1;
+    for (let y = ih - 1; y >= 0; y--) {
+      if (ip[(y * iw + ix) * 4 + 3] > 12) { iy = y; break; }
+    }
+    if (iy < 0) continue;
+    const cy = iy * sy;
+    // warm bounce just under the contact line
+    let g = octx.createLinearGradient(0, cy, 0, cy + 16);
+    g.addColorStop(0, "rgba(168,120,62,0.5)");
+    g.addColorStop(1, "rgba(168,120,62,0)");
+    octx.fillStyle = g;
+    octx.fillRect(cx, cy, 1, 16);
+    // occlusion core: near-black warm brown, maximum at the line
+    g = octx.createLinearGradient(0, cy - 2, 0, cy + tail);
+    g.addColorStop(0, "rgba(40,24,13,0.92)");
+    g.addColorStop(0.45, "rgba(40,24,13,0.5)");
+    g.addColorStop(1, "rgba(40,24,13,0)");
+    octx.fillStyle = g;
+    octx.fillRect(cx, cy - 2, 1, tail + 2);
+  }
+  boxBlur2D(oc, 2);  // tight: hardness at the line is what grounds the figure
+  giantOcclusionG = oc;
 }
 
 function drawGiantShadow() {
   if (!giantImg) return;
   buildGiantShadow();
-  if (!giantShadowG) return;
+  if (!giantShadowG || !giantOcclusionG) return;
   const pad = giantShadowG._pad;
   const hScale = giantShadowG._hScale;
-  // the reflection's feet touch the body's feet exactly, then it stays
-  // fully inside the sand strip above the title plaque
-  const feetY = GIANT_Y + 778 - hScale;
+  const feetY = GIANT_Y + 778 - hScale;  // pool touches the body's feet
   push();
   imageMode(CORNER);
   blendMode(MULTIPLY);
-  image(giantShadowG, GIANT_X - pad, feetY - pad * hScale);
+  image(giantShadowG, GIANT_X - pad, feetY - pad * hScale);  // cast pool
+  image(giantOcclusionG, GIANT_X, GIANT_Y);                   // occlusion core
   blendMode(BLEND);
   pop();
 }
