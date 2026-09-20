@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Too Big To Go Home — generative rebuild (v33)</title>
+<title>Too Big To Go Home — generative rebuild (v34)</title>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -84,7 +84,7 @@
   </figure>
   <figure class="panel" id="art-panel" style="margin:0">
     <div id="sketch-holder"></div>
-    <figcaption>Re-creation &middot; v33</figcaption>
+    <figcaption>Re-creation &middot; v34</figcaption>
   </figure>
 </div>
 <script>
@@ -1815,10 +1815,11 @@ function drawGiantShadow() {
   buildGiantShadow();
   if (!giantShadowG) return;
   const pad = giantShadowG._pad;
-  // reflected mask aligned underneath: the figure's feet touch the top
-  // of the reflection, which sinks below (behind the title plaque)
-  const feetY = GIANT_Y + GIANT_H - 24;
-  const hScale = 0.45;
+  // reflected mask aligned underneath: the reflection's feet (its top
+  // edge, i.e. the figure's feet flipped) touch the body's bottom exactly,
+  // then it sinks below (behind the title plaque)
+  const hScale = 0.32;  // shrunk reflection
+  const feetY = GIANT_Y + 778 - hScale;  // cutout feet reach row 778: reflection feet touch there
   push();
   imageMode(CORNER);
   blendMode(MULTIPLY);
