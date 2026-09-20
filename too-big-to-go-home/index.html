@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Too Big To Go Home — generative rebuild (v34)</title>
+<title>Too Big To Go Home — generative rebuild (v35)</title>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -84,7 +84,7 @@
   </figure>
   <figure class="panel" id="art-panel" style="margin:0">
     <div id="sketch-holder"></div>
-    <figcaption>Re-creation &middot; v34</figcaption>
+    <figcaption>Re-creation &middot; v35</figcaption>
   </figure>
 </div>
 <script>
@@ -1775,9 +1775,9 @@ function boxBlur2D(g, radius) {
 function buildGiantShadow() {
   if (giantShadowG || !giantImg) return;
   const pad = 60;
+  // 1) the cutout mask, reflected: flipped vertically like a mirror image
   const sh = createGraphics(GIANT_W + pad * 2, GIANT_H + pad * 2);
   sh.pixelDensity(1);
-  // the cutout mask, reflected: flipped vertically like a mirror image
   sh.push();
   sh.translate(0, GIANT_H + pad * 2);
   sh.scale(1, -1);
@@ -1791,23 +1791,35 @@ function buildGiantShadow() {
     px[i] = 80; px[i + 1] = 55; px[i + 2] = 32;
   }
   sh.updatePixels();
-  boxBlur2D(sh, 10);
-  boxBlur2D(sh, 10);
-  // distance fade: strongest near the feet, dissolving downward
-  const mg = createGraphics(GIANT_W + pad * 2, GIANT_H + pad * 2);
+  // 2) fit the frame: the sand strip between the feet (y~1276) and the
+  // title plaque (y=1342) is only ~66px, so the reflection is scaled to
+  // end (fully faded) just above the plaque -- nothing hides behind it
+  const hScale = 0.069;
+  const fw = GIANT_W + pad * 2;
+  const fh = Math.round((GIANT_H + pad * 2) * hScale);
+  const fin = createGraphics(fw, fh);
+  fin.pixelDensity(1);
+  fin.imageMode(CORNER);
+  fin.image(sh, 0, 0, fw, fh);
+  sh.remove();
+  boxBlur2D(fin, 7);
+  boxBlur2D(fin, 7);
+  // 3) distance fade at final scale: strongest at the feet, gone at the far end
+  const mg = createGraphics(fw, fh);
   mg.pixelDensity(1);
   const mctx = mg.drawingContext;
-  const grad = mctx.createLinearGradient(0, 0, 0, GIANT_H + pad * 2);
+  const grad = mctx.createLinearGradient(0, 0, 0, fh);
   grad.addColorStop(0, "rgba(0,0,0,1)");
   grad.addColorStop(1, "rgba(0,0,0,0)");
   mctx.fillStyle = grad;
-  mctx.fillRect(0, 0, mg.width, mg.height);
-  sh.drawingContext.globalCompositeOperation = "destination-in";
-  sh.image(mg, 0, 0);
-  sh.drawingContext.globalCompositeOperation = "source-over";
+  mctx.fillRect(0, 0, fw, fh);
+  fin.drawingContext.globalCompositeOperation = "destination-in";
+  fin.image(mg, 0, 0);
+  fin.drawingContext.globalCompositeOperation = "source-over";
   mg.remove();
-  giantShadowG = sh;
+  giantShadowG = fin;
   giantShadowG._pad = pad;
+  giantShadowG._hScale = hScale;
 }
 
 function drawGiantShadow() {
@@ -1815,17 +1827,14 @@ function drawGiantShadow() {
   buildGiantShadow();
   if (!giantShadowG) return;
   const pad = giantShadowG._pad;
-  // reflected mask aligned underneath: the reflection's feet (its top
-  // edge, i.e. the figure's feet flipped) touch the body's bottom exactly,
-  // then it sinks below (behind the title plaque)
-  const hScale = 0.32;  // shrunk reflection
-  const feetY = GIANT_Y + 778 - hScale;  // cutout feet reach row 778: reflection feet touch there
+  const hScale = giantShadowG._hScale;
+  // the reflection's feet touch the body's feet exactly, then it stays
+  // fully inside the sand strip above the title plaque
+  const feetY = GIANT_Y + 778 - hScale;
   push();
   imageMode(CORNER);
   blendMode(MULTIPLY);
-  image(giantShadowG,
-        GIANT_X - pad, feetY - pad * hScale,
-        GIANT_W + pad * 2, (GIANT_H + pad * 2) * hScale);
+  image(giantShadowG, GIANT_X - pad, feetY - pad * hScale);
   blendMode(BLEND);
   pop();
 }
