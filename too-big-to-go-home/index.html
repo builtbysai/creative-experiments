@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Too Big To Go Home — generative rebuild (v25)</title>
+<title>Too Big To Go Home — generative rebuild (v26)</title>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -72,6 +72,9 @@
     #split { flex-direction: column; }
   }
 </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rye&display=swap" rel="stylesheet">
 </head>
 <body>
 <div id="split">
@@ -81,7 +84,7 @@
   </figure>
   <figure class="panel" id="art-panel" style="margin:0">
     <div id="sketch-holder"></div>
-    <figcaption>Re-creation &middot; v25</figcaption>
+    <figcaption>Re-creation &middot; v26</figcaption>
   </figure>
 </div>
 <script>
@@ -242,10 +245,20 @@ function setup() {
   noiseSeed(SEED);
   SYMS.push(symOdoNyera, symSankofa, symDwennimmen, symGyeNyame, symAkoma, symDuafe);
   noLoop();
-  loadImage(GIANT_CUTOUT_SRC,
-    img => { giantImg = img; weaveCloth(); },
-    () => { weaveCloth(); });
+  // wait for the Rye title font (with timeout fallback) before the single draw
+  const begin = () => {
+    if (titleFontReady) return;
+    titleFontReady = true;
+    loadImage(GIANT_CUTOUT_SRC,
+      img => { giantImg = img; weaveCloth(); },
+      () => { weaveCloth(); });
+  };
+  if (document.fonts && document.fonts.load) {
+    document.fonts.load('64px Rye').then(begin).catch(begin);
+    setTimeout(begin, 3500);
+  } else { begin(); }
 }
+let titleFontReady = false;
 function draw() {}
 
 // Letterbox the canvas to its panel (split view: original | re-creation),
@@ -817,35 +830,81 @@ function titlePlaque() {
   plaqueDistress(py);
 }
 
+/* Rope-lettering title (v26): Rye skeleton with a generative twisted-rope
+   fill. Dark offset shadow, letter mask, diagonal rope-twist stripes drawn
+   with plain math (no context transform), single destination-in composite. */
 function plaqueText(cx, cy, str) {
-  textFont('Georgia');
-  textStyle(BOLD);
-  let sz = 70;
-  textSize(sz);
+  const py = H - FWB;
+  const fontName = 'Rye';
+  const size = 64, tracking = 5;
+  textFont(fontName); textStyle(BOLD); textSize(size);
   const maxW = W - 220;
-  if (textWidth(str) > maxW) { sz = (sz * maxW) / textWidth(str); textSize(sz); }
-  const tracking = 3;
   let totalW = 0;
   for (const ch of str) totalW += textWidth(ch) + tracking;
   totalW -= tracking;
-  let x = cx - totalW / 2;
-  textAlign(LEFT, CENTER);
+  let sz = size;
+  if (totalW > maxW) { sz = (size * maxW) / totalW; textSize(sz); }
+  // layout with per-letter jitter (seeded by global SEED)
+  textFont(fontName); textStyle(BOLD); textSize(sz);
+  const arr = [];
+  totalW = 0;
   for (const ch of str) {
-    const wch = textWidth(ch);
-    const jy = random(-1.8, 1.8), jr = random(-0.014, 0.014);
-    push();
-    translate(x + wch / 2, cy + jy);
-    rotate(jr);
-    // painted shadow first
-    noStroke(); fill(26, 14, 6, 210);
-    text(ch, -wch / 2 + 2, 2.5);
-    // brushy cream passes for a hand-painted edge
-    fill(232, 212, 160, 90); text(ch, -wch / 2 - 1.1, -0.9);
-    fill(220, 198, 148, 130); text(ch, -wch / 2 + 1.1, 0.9);
-    fill(241, 226, 180, 240); text(ch, -wch / 2, 0);
-    pop();
-    x += wch + tracking;
+    const w = textWidth(ch);
+    arr.push({ ch, w, jy: random(-1.8, 1.8), jr: random(-0.014, 0.014) });
+    totalW += w + tracking;
   }
+  totalW -= tracking;
+  let x = W / 2 - totalW / 2;
+  for (const L of arr) { L.x = x + L.w / 2; x += L.w + tracking; }
+  // 1. dark offset shadow (raised rope)
+  textAlign(CENTER, CENTER);
+  for (const L of arr) {
+    push();
+    translate(L.x, cy + L.jy);
+    rotate(L.jr);
+    noStroke(); fill(22, 12, 5, 235);
+    text(L.ch, 3, 4);
+    pop();
+  }
+  // 2. letter mask
+  const mg = createGraphics(W, FWB);
+  mg.clear();
+  mg.textFont(fontName); mg.textStyle(BOLD); mg.textSize(sz);
+  mg.textAlign(mg.CENTER, mg.CENTER);
+  mg.fill(255); mg.noStroke();
+  for (const L of arr) {
+    mg.push();
+    mg.translate(L.x, FWB / 2 + 8 + L.jy);
+    mg.rotate(L.jr);
+    mg.text(L.ch, 0, 0);
+    mg.pop();
+  }
+  // 3. diagonal rope-twist stripes (manual math, no context transform)
+  const fg = createGraphics(W, FWB);
+  fg.clear();
+  const angle = -0.55, stripeW = 7;
+  const dx = Math.cos(angle), dy = Math.sin(angle);
+  const nx = -dy, ny = dx;
+  const LL = W + FWB;
+  const cA = fg.color(238, 222, 178), cB = fg.color(196, 168, 122);
+  fg.strokeWeight(stripeW + 0.6);
+  for (let d = -LL; d < LL; d += stripeW) {
+    const cxp = W / 2 + nx * d, cyp = FWB / 2 + ny * d;
+    fg.stroke(Math.round(d / stripeW) % 2 === 0 ? cA : cB);
+    fg.line(cxp - dx * LL, cyp - dy * LL, cxp + dx * LL, cyp + dy * LL);
+  }
+  fg.strokeWeight(1.4); fg.stroke(120, 92, 58, 200);
+  for (let d = -LL; d < LL; d += stripeW) {
+    const cxp = W / 2 + nx * d, cyp = FWB / 2 + ny * d;
+    fg.line(cxp - dx * LL, cyp - dy * LL, cxp + dx * LL, cyp + dy * LL);
+  }
+  // 4. mask stripes to the letters (single destination-in op)
+  const fctx = fg.drawingContext;
+  fctx.globalCompositeOperation = 'destination-in';
+  fctx.drawImage(mg.canvas, 0, 0);
+  fctx.globalCompositeOperation = 'source-over';
+  image(fg, 0, py);
+  mg.remove(); fg.remove();
   textAlign(CENTER, CENTER);
 }
 
