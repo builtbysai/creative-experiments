@@ -291,7 +291,6 @@ function weaveCloth() {
   drawPath();                    // winding dirt path from hut door
   drawShrubs();                  // generative desert shrubs
   drawAcacia(880, 1164, 0.55);    // small acacia tree, foreground
-  drawGiantShadow();             // soft procedural shadow of the giant
   drawGiant();                   // the giant
   drawFrame();
 }
@@ -1525,7 +1524,6 @@ function drawHut(hx, s, ndebele) {
   pop();
 }
 
-
 /* ============================================================
    PATH, SHRUBS, ACACIA — foreground life around the hut.
    A winding dirt path leads from the hut door toward the viewer.
@@ -1678,161 +1676,11 @@ function drawAcacia(tx, ty, s) {
   pop();
 }
 
-
-/* ---------------- the giant (layer 7) + its shadow ----------------
+/* ---------------- the giant (layer 7) ----------------
    Crouching woven figure cut out from the original artwork and pasted
    into the re-creation at the original's relative position (full size).
-   The shadow is procedural and falls like the cactus's shadow: a soft
-   contact mass from the cutout's own alpha silhouette (multiply, so the
-   sand shows through) plus a long soft band reaching right and angling
-   gently down, with woven light dashes across it.
    ------------------------------------------------------------------ */
 const GIANT_X = 191, GIANT_Y = 498, GIANT_W = 601, GIANT_H = 779;
-let giantShadowG = null;
-let giantOcclusionG = null;
-// separable box blur on a graphics' pixels (p5's filter(BLUR) needs WebGL;
-// this keeps the shadow working everywhere, including headless renders)
-function boxBlur2D(g, radius) {
-  const w = g.width, h = g.height, n = radius * 2 + 1;
-  g.loadPixels();
-  const src = g.pixels.slice();
-  const tmp = new Uint8ClampedArray(src.length);
-  const clampX = x => Math.min(w - 1, Math.max(0, x));
-  const clampY = y => Math.min(h - 1, Math.max(0, y));
-  for (let y = 0; y < h; y++) {
-    let r = 0, gg = 0, b = 0, a = 0;
-    const row = y * w * 4;
-    for (let x = -radius; x <= radius; x++) {
-      const i = row + clampX(x) * 4;
-      r += src[i]; gg += src[i + 1]; b += src[i + 2]; a += src[i + 3];
-    }
-    for (let x = 0; x < w; x++) {
-      const i = row + x * 4;
-      tmp[i] = r / n; tmp[i + 1] = gg / n; tmp[i + 2] = b / n; tmp[i + 3] = a / n;
-      const iO = row + clampX(x - radius) * 4, iI = row + clampX(x + radius + 1) * 4;
-      r += src[iI] - src[iO]; gg += src[iI + 1] - src[iO + 1];
-      b += src[iI + 2] - src[iO + 2]; a += src[iI + 3] - src[iO + 3];
-    }
-  }
-  for (let x = 0; x < w; x++) {
-    let r = 0, gg = 0, b = 0, a = 0;
-    for (let y = -radius; y <= radius; y++) {
-      const i = (clampY(y) * w + x) * 4;
-      r += tmp[i]; gg += tmp[i + 1]; b += tmp[i + 2]; a += tmp[i + 3];
-    }
-    for (let y = 0; y < h; y++) {
-      const i = (y * w + x) * 4;
-      src[i] = r / n; src[i + 1] = gg / n; src[i + 2] = b / n; src[i + 3] = a / n;
-      const iO = (clampY(y - radius) * w + x) * 4, iI = (clampY(y + radius + 1) * w + x) * 4;
-      r += tmp[iI] - tmp[iO]; gg += tmp[iI + 1] - tmp[iO + 1];
-      b += tmp[iI + 2] - tmp[iO + 2]; a += tmp[iI + 3] - tmp[iO + 3];
-    }
-  }
-  for (let i = 0; i < src.length; i++) g.pixels[i] = src[i];
-  g.updatePixels();
-}
-function buildGiantShadow() {
-  if ((giantShadowG && giantOcclusionG) || !giantImg) return;
-  const pad = 60;
-  // ---- cast pool: the reflected silhouette, cooled, fits the sand strip ----
-  const sh = createGraphics(GIANT_W + pad * 2, GIANT_H + pad * 2);
-  sh.pixelDensity(1);
-  sh.push();
-  sh.translate(0, GIANT_H + pad * 2);
-  sh.scale(1, -1);
-  sh.imageMode(CORNER);
-  sh.image(giantImg, pad, pad, GIANT_W, GIANT_H);
-  sh.pop();
-  sh.loadPixels();
-  const px = sh.pixels;
-  for (let i = 0; i < px.length; i += 4) {
-    px[i] = 88; px[i + 1] = 71; px[i + 2] = 56;  // cooled dark sand, not black
-  }
-  sh.updatePixels();
-  const hScale = 0.069;
-  const fw = GIANT_W + pad * 2;
-  const fh = Math.round((GIANT_H + pad * 2) * hScale);
-  const fin = createGraphics(fw, fh);
-  fin.pixelDensity(1);
-  fin.imageMode(CORNER);
-  fin.image(sh, 0, 0, fw, fh);
-  sh.remove();
-  boxBlur2D(fin, 7);
-  boxBlur2D(fin, 7);
-  // distance fade: dark near the figure, gone before the title plaque
-  const mg = createGraphics(fw, fh);
-  mg.pixelDensity(1);
-  const mctx = mg.drawingContext;
-  const grad = mctx.createLinearGradient(0, 0, 0, fh);
-  grad.addColorStop(0, "rgba(0,0,0,0.95)");
-  grad.addColorStop(1, "rgba(0,0,0,0)");
-  mctx.fillStyle = grad;
-  mctx.fillRect(0, 0, fw, fh);
-  fin.drawingContext.globalCompositeOperation = "destination-in";
-  fin.image(mg, 0, 0);
-  fin.drawingContext.globalCompositeOperation = "source-over";
-  mg.remove();
-  giantShadowG = fin;
-  giantShadowG._pad = pad;
-  giantShadowG._hScale = hScale;
-  // ---- occlusion core: the anti-floating layer ----
-  buildGiantOcclusion();
-}
-
-/* Occlusion shadow: the darkest value in the scene, hugging the exact
-   ground-contact line of the cutout (buttocks, feet) with no gap.
-   Darkest right at the contact, softening downward; a whisper of warm
-   sand-bounce just inside it. This is what makes the figure sit. */
-function buildGiantOcclusion() {
-  if (giantOcclusionG || !giantImg) return;
-  const tail = 34;
-  const oc = createGraphics(GIANT_W, GIANT_H + tail);
-  oc.pixelDensity(1);
-  giantImg.loadPixels();
-  const ip = giantImg.pixels, iw = giantImg.width, ih = giantImg.height;
-  const sx = GIANT_W / iw, sy = GIANT_H / ih;
-  const octx = oc.drawingContext;
-  for (let cx = 0; cx < GIANT_W; cx++) {
-    const ix = Math.min(iw - 1, Math.floor(cx / sx));
-    let iy = -1;
-    for (let y = ih - 1; y >= 0; y--) {
-      if (ip[(y * iw + ix) * 4 + 3] > 12) { iy = y; break; }
-    }
-    if (iy < 0) continue;
-    const cy = iy * sy;
-    // warm bounce just under the contact line
-    let g = octx.createLinearGradient(0, cy, 0, cy + 16);
-    g.addColorStop(0, "rgba(168,120,62,0.5)");
-    g.addColorStop(1, "rgba(168,120,62,0)");
-    octx.fillStyle = g;
-    octx.fillRect(cx, cy, 1, 16);
-    // occlusion core: near-black warm brown, maximum at the line
-    g = octx.createLinearGradient(0, cy - 2, 0, cy + tail);
-    g.addColorStop(0, "rgba(40,24,13,0.92)");
-    g.addColorStop(0.45, "rgba(40,24,13,0.5)");
-    g.addColorStop(1, "rgba(40,24,13,0)");
-    octx.fillStyle = g;
-    octx.fillRect(cx, cy - 2, 1, tail + 2);
-  }
-  boxBlur2D(oc, 2);  // tight: hardness at the line is what grounds the figure
-  giantOcclusionG = oc;
-}
-
-function drawGiantShadow() {
-  if (!giantImg) return;
-  buildGiantShadow();
-  if (!giantShadowG || !giantOcclusionG) return;
-  const pad = giantShadowG._pad;
-  const hScale = giantShadowG._hScale;
-  const feetY = GIANT_Y + 778 - hScale;  // pool touches the body's feet
-  push();
-  imageMode(CORNER);
-  blendMode(MULTIPLY);
-  image(giantShadowG, GIANT_X - pad, feetY - pad * hScale);  // cast pool
-  image(giantOcclusionG, GIANT_X, GIANT_Y);                   // occlusion core
-  blendMode(BLEND);
-  pop();
-}
 function drawGiant() {
   if (!giantImg) return;
   push();
