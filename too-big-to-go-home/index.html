@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Too Big To Go Home — generative rebuild (v26)</title>
+<title>Too Big To Go Home — generative rebuild (v27)</title>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -84,7 +84,7 @@
   </figure>
   <figure class="panel" id="art-panel" style="margin:0">
     <div id="sketch-holder"></div>
-    <figcaption>Re-creation &middot; v26</figcaption>
+    <figcaption>Re-creation &middot; v27</figcaption>
   </figure>
 </div>
 <script>
@@ -333,7 +333,8 @@ function weaveCloth() {
   drawPath();                    // winding dirt path from hut door
   drawShrubs();                  // generative desert shrubs
   drawAcacia(880, 1080, 0.55);    // small acacia tree, foreground
-  drawGiant();                   // the giant, no shadow
+  drawGiantShadow();             // soft procedural shadow of the giant
+  drawGiant();                   // the giant
   drawFrame();
 }
 
@@ -1931,16 +1932,94 @@ function drawAcacia(tx, ty, s) {
 }
 
 
-/* ---------------- the giant (layer 7, no shadow) ----------------
+/* ---------------- the giant (layer 7) + its shadow ----------------
    Crouching woven figure cut out from the original artwork and pasted
    into the re-creation at the original's relative position.
+   The shadow is procedural: the cutout's own alpha silhouette, darkened,
+   blurred, offset down-right (the sun sits upper-left), composited with
+   multiply so the sand texture shows through.
    ------------------------------------------------------------------ */
+const GIANT_X = 255, GIANT_Y = 521, GIANT_W = 481, GIANT_H = 623;
+let giantShadowG = null;
+// separable box blur on a graphics' pixels (p5's filter(BLUR) needs WebGL;
+// this keeps the shadow working everywhere, including headless renders)
+function boxBlur2D(g, radius) {
+  const w = g.width, h = g.height, n = radius * 2 + 1;
+  g.loadPixels();
+  const src = g.pixels.slice();
+  const tmp = new Uint8ClampedArray(src.length);
+  const clampX = x => Math.min(w - 1, Math.max(0, x));
+  const clampY = y => Math.min(h - 1, Math.max(0, y));
+  for (let y = 0; y < h; y++) {
+    let r = 0, gg = 0, b = 0, a = 0;
+    const row = y * w * 4;
+    for (let x = -radius; x <= radius; x++) {
+      const i = row + clampX(x) * 4;
+      r += src[i]; gg += src[i + 1]; b += src[i + 2]; a += src[i + 3];
+    }
+    for (let x = 0; x < w; x++) {
+      const i = row + x * 4;
+      tmp[i] = r / n; tmp[i + 1] = gg / n; tmp[i + 2] = b / n; tmp[i + 3] = a / n;
+      const iO = row + clampX(x - radius) * 4, iI = row + clampX(x + radius + 1) * 4;
+      r += src[iI] - src[iO]; gg += src[iI + 1] - src[iO + 1];
+      b += src[iI + 2] - src[iO + 2]; a += src[iI + 3] - src[iO + 3];
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let r = 0, gg = 0, b = 0, a = 0;
+    for (let y = -radius; y <= radius; y++) {
+      const i = (clampY(y) * w + x) * 4;
+      r += tmp[i]; gg += tmp[i + 1]; b += tmp[i + 2]; a += tmp[i + 3];
+    }
+    for (let y = 0; y < h; y++) {
+      const i = (y * w + x) * 4;
+      src[i] = r / n; src[i + 1] = gg / n; src[i + 2] = b / n; src[i + 3] = a / n;
+      const iO = (clampY(y - radius) * w + x) * 4, iI = (clampY(y + radius + 1) * w + x) * 4;
+      r += tmp[iI] - tmp[iO]; gg += tmp[iI + 1] - tmp[iO + 1];
+      b += tmp[iI + 2] - tmp[iO + 2]; a += tmp[iI + 3] - tmp[iO + 3];
+    }
+  }
+  for (let i = 0; i < src.length; i++) g.pixels[i] = src[i];
+  g.updatePixels();
+}
+function buildGiantShadow() {
+  if (giantShadowG || !giantImg) return;
+  const pad = 70;
+  const sh = createGraphics(GIANT_W + pad * 2, GIANT_H + pad * 2);
+  sh.pixelDensity(1);
+  sh.imageMode(CORNER);
+  sh.image(giantImg, pad, pad, GIANT_W, GIANT_H);
+  // silhouette: dark warm umber, keep the cutout's alpha
+  sh.loadPixels();
+  const px = sh.pixels;
+  for (let i = 0; i < px.length; i += 4) {
+    px[i] = 80; px[i + 1] = 55; px[i + 2] = 32;
+  }
+  sh.updatePixels();
+  boxBlur2D(sh, 9);
+  boxBlur2D(sh, 9);
+  giantShadowG = sh;
+  giantShadowG._pad = pad;
+}
+function drawGiantShadow() {
+  if (!giantImg) return;
+  buildGiantShadow();
+  if (!giantShadowG) return;
+  const pad = giantShadowG._pad;
+  push();
+  imageMode(CORNER);
+  blendMode(MULTIPLY);
+  // sun is upper-left: shadow falls to the lower-right
+  image(giantShadowG, GIANT_X - pad + 55, GIANT_Y - pad + 30);
+  blendMode(BLEND);
+  pop();
+}
 function drawGiant() {
   if (!giantImg) return;
   push();
   imageMode(CORNER);
   // cutout is 268x350; placed to match the original: x 14-82%, y 28-86%.
-  image(giantImg, 255, 521, 481, 623);
+  image(giantImg, GIANT_X, GIANT_Y, GIANT_W, GIANT_H);
   pop();
 }
 
