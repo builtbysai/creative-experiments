@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Too Big To Go Home — generative rebuild (v30)</title>
+<title>Too Big To Go Home — generative rebuild (v32)</title>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -84,7 +84,7 @@
   </figure>
   <figure class="panel" id="art-panel" style="margin:0">
     <div id="sketch-holder"></div>
-    <figcaption>Re-creation &middot; v30</figcaption>
+    <figcaption>Re-creation &middot; v32</figcaption>
   </figure>
 </div>
 <script>
@@ -1790,6 +1790,62 @@ function buildGiantShadow() {
   boxBlur2D(sh, 10);
   giantShadowG = sh;
   giantShadowG._pad = pad;
+  buildGiantBand();
+}
+
+/* The long cast band, pre-rendered on its own layer: layered translucent
+   quads (wide at the root), soft core, woven light dashes, then a
+   destination-in gradient so the far end melts into the sand with no seams. */
+let giantBandG = null;
+function buildGiantBand() {
+  if (giantBandG) return;
+  const L = 400, w0 = 150, w1 = 90, pad = 60;
+  const ax = GIANT_X + GIANT_W * 0.55;
+  const ay = GIANT_Y + GIANT_H - 28;
+  const ang = 11 * Math.PI / 180;
+  const bg = createGraphics(L + pad * 2, w0 + pad * 2);
+  bg.pixelDensity(1);
+  const ox = pad, oy = pad + w0 / 2;  // band axis origin in layer coords
+  bg.noStroke();
+  // soft band: layered translucent quads, edges dissolve outward
+  for (let k = 8; k > 0; k--) {
+    bg.fill(99, 66, 40, 34);
+    const ix = k * 7, iy = k * 4;
+    bg.quad(ox + ix * 0.6, oy - w0 / 2 + iy, ox + L - ix * 0.4, oy - w1 / 2 + iy,
+             ox + L - ix * 0.4, oy + w1 / 2 - iy, ox + ix * 0.6, oy + w0 / 2 - iy);
+  }
+  // soft core
+  for (let k = 5; k > 0; k--) {
+    bg.fill(107, 74, 46, 8);
+    bg.ellipse(ox + L * 0.42, oy + 2, L * 0.8 - k * 12, (w0 + w1) / 2 - k * 5);
+  }
+  // woven light dashes across the band
+  bg.strokeCap(ROUND);
+  for (let i = 0; i < 10; i++) {
+    const t = 0.10 + i * 0.085;
+    const dx = ox + L * t, dy = oy + 2;
+    const dc = color("#DCC088");
+    dc.setAlpha(110 * (1 - 0.35 * t));
+    bg.stroke(dc);
+    bg.strokeWeight(5);
+    bg.line(dx + 4, dy - 12, dx - 4, dy + 12);
+  }
+  bg.noStroke();
+  // far-end dissolve: destination-in linear gradient (full until 45% of L)
+  const mg = createGraphics(L + pad * 2, w0 + pad * 2);
+  mg.pixelDensity(1);
+  const mctx = mg.drawingContext;
+  const grad = mctx.createLinearGradient(ox + L * 0.45, 0, ox + L, 0);
+  grad.addColorStop(0, "rgba(0,0,0,1)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  mctx.fillStyle = grad;
+  mctx.fillRect(0, 0, mg.width, mg.height);
+  bg.drawingContext.globalCompositeOperation = "destination-in";
+  bg.image(mg, 0, 0);
+  bg.drawingContext.globalCompositeOperation = "source-over";
+  mg.remove();
+  bg._ax = ax; bg._ay = ay; bg._ang = ang; bg._pad = pad; bg._w0 = w0;
+  giantBandG = bg;
 }
 function drawGiantShadow() {
   if (!giantImg) return;
@@ -1802,6 +1858,7 @@ function drawGiantShadow() {
   imageMode(CORNER);
   blendMode(MULTIPLY);
   image(giantShadowG, GIANT_X - pad + 14, GIANT_Y - pad + 20);
+  image(giantShadowG, GIANT_X - pad + 14, GIANT_Y - pad + 20);
   blendMode(BLEND);
   pop();
   // cast band: falls like the cactus's shadow
@@ -1812,38 +1869,12 @@ function drawGiantShadow() {
    right and angling gently down from the giant's base, with woven light
    dashes across it. Same palette and layering as drawCactus's shadow. */
 function drawGiantShadowBand() {
-  const ax = GIANT_X + GIANT_W * 0.55;  // starts under the giant, emerges from its base
-  const ay = GIANT_Y + GIANT_H - 28;
-  const ang = 11 * Math.PI / 180;
-  const L = 430, w0 = 120, w1 = 84;  // long cast shadow
+  if (!giantBandG) return;
   push();
-  translate(ax, ay);
-  rotate(ang);
-  noStroke();
-  // soft band: layered translucent quads, edges dissolve outward
-  for (let k = 6; k > 0; k--) {
-    fill(99, 66, 40, 21);
-    const ix = k * 7, iy = k * 4;
-    quad(ix * 0.6, -w0 / 2 + iy, L - ix * 0.4, -w1 / 2 + iy,
-         L - ix * 0.4, w1 / 2 - iy, ix * 0.6, w0 / 2 - iy);
-  }
-  // soft core
-  for (let k = 5; k > 0; k--) {
-    fill(107, 74, 46, 8);
-    ellipse(L / 2, 2, L - k * 12, (w0 + w1) / 2 - k * 5);
-  }
-  // woven light dashes across the band
-  strokeCap(ROUND);
-  const dc = color("#DCC088");
-  dc.setAlpha(95);
-  stroke(dc);
-  strokeWeight(4.5);
-  for (let i = 0; i < 10; i++) {
-    const t = 0.10 + i * 0.085;
-    const dx = L * t, dy = 2;
-    line(dx + 3.5, dy - 11, dx - 3.5, dy + 11);
-  }
-  noStroke();
+  translate(giantBandG._ax, giantBandG._ay);
+  rotate(giantBandG._ang);
+  imageMode(CORNER);
+  image(giantBandG, -giantBandG._pad, -giantBandG._pad - giantBandG._w0 / 2);
   pop();
 }
 function drawGiant() {
