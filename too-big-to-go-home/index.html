@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Too Big To Go Home — generative rebuild (v27)</title>
+<title>Too Big To Go Home — generative rebuild (v28)</title>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -84,7 +84,7 @@
   </figure>
   <figure class="panel" id="art-panel" style="margin:0">
     <div id="sketch-holder"></div>
-    <figcaption>Re-creation &middot; v27</figcaption>
+    <figcaption>Re-creation &middot; v28</figcaption>
   </figure>
 </div>
 <script>
@@ -1935,9 +1935,10 @@ function drawAcacia(tx, ty, s) {
 /* ---------------- the giant (layer 7) + its shadow ----------------
    Crouching woven figure cut out from the original artwork and pasted
    into the re-creation at the original's relative position.
-   The shadow is procedural: the cutout's own alpha silhouette, darkened,
-   blurred, offset down-right (the sun sits upper-left), composited with
-   multiply so the sand texture shows through.
+   The shadow is procedural: the cutout's own alpha silhouette, stamped
+   several times along the away-from-sun direction (sun sits upper-left,
+   so the shadow stretches down-right), darkened, blurred, faded with
+   distance, composited with multiply so the sand texture shows through.
    ------------------------------------------------------------------ */
 const GIANT_X = 255, GIANT_Y = 521, GIANT_W = 481, GIANT_H = 623;
 let giantShadowG = null;
@@ -1984,12 +1985,22 @@ function boxBlur2D(g, radius) {
 }
 function buildGiantShadow() {
   if (giantShadowG || !giantImg) return;
-  const pad = 70;
-  const sh = createGraphics(GIANT_W + pad * 2, GIANT_H + pad * 2);
+  const pad = 70, extra = 220;
+  const sh = createGraphics(GIANT_W + pad * 2 + extra, GIANT_H + pad * 2 + extra);
   sh.pixelDensity(1);
   sh.imageMode(CORNER);
-  sh.image(giantImg, pad, pad, GIANT_W, GIANT_H);
-  // silhouette: dark warm umber, keep the cutout's alpha
+  // stamp the cutout several times along the away-from-sun direction
+  // (sun upper-left -> shadow reaches down-right), fading with distance
+  const stamps = [
+    [0, 0, 1], [48, 10, 0.5], [100, 22, 0.28], [155, 36, 0.14]
+  ];
+  const sctx = sh.drawingContext;
+  for (const [ox, oy, a] of stamps) {
+    sctx.globalAlpha = a;
+    sh.image(giantImg, pad + ox, pad + oy, GIANT_W, GIANT_H);
+  }
+  sctx.globalAlpha = 1;
+  // silhouette: dark warm umber, keep the composited alpha
   sh.loadPixels();
   const px = sh.pixels;
   for (let i = 0; i < px.length; i += 4) {
@@ -1998,6 +2009,19 @@ function buildGiantShadow() {
   sh.updatePixels();
   boxBlur2D(sh, 9);
   boxBlur2D(sh, 9);
+  // distance fade: dissolve the far (down-right) end of the cast shadow
+  sh.loadPixels();
+  const w = sh.width, h = sh.height, px2 = sh.pixels;
+  const x0 = pad + GIANT_W * 0.35, x1 = pad + GIANT_W + extra;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let t = (x - x0) / (x1 - x0);
+      t = Math.min(1, Math.max(0, t));
+      const i = (y * w + x) * 4 + 3;
+      px2[i] = px2[i] * (1 - 0.85 * t * t);
+    }
+  }
+  sh.updatePixels();
   giantShadowG = sh;
   giantShadowG._pad = pad;
 }
@@ -2009,8 +2033,8 @@ function drawGiantShadow() {
   push();
   imageMode(CORNER);
   blendMode(MULTIPLY);
-  // sun is upper-left: shadow falls to the lower-right
-  image(giantShadowG, GIANT_X - pad + 55, GIANT_Y - pad + 30);
+  // the extension is baked into the shadow graphics (away from the sun)
+  image(giantShadowG, GIANT_X - pad, GIANT_Y - pad);
   blendMode(BLEND);
   pop();
 }
