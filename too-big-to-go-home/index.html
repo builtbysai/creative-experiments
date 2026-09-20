@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Too Big To Go Home — generative rebuild (v29)</title>
+<title>Too Big To Go Home — generative rebuild (v30)</title>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -84,7 +84,7 @@
   </figure>
   <figure class="panel" id="art-panel" style="margin:0">
     <div id="sketch-holder"></div>
-    <figcaption>Re-creation &middot; v29</figcaption>
+    <figcaption>Re-creation &middot; v30</figcaption>
   </figure>
 </div>
 <script>
@@ -1299,7 +1299,7 @@ function cactusColumn(w, h) {
    ============================================================ */
 
 function drawSun() {
-  const sx = 285, sy = 160, R = 64;
+  const sx = 200, sy = 135, R = 46; // small and high: a far sun
 
   // ---- outer halo: warm, layered ----
   noStroke();
@@ -1814,8 +1814,8 @@ function drawGiantShadow() {
 function drawGiantShadowBand() {
   const ax = GIANT_X + GIANT_W * 0.55;  // starts under the giant, emerges from its base
   const ay = GIANT_Y + GIANT_H - 28;
-  const ang = 13 * Math.PI / 180;
-  const L = 260, w0 = 120, w1 = 84;
+  const ang = 11 * Math.PI / 180;
+  const L = 430, w0 = 120, w1 = 84;  // long cast shadow
   push();
   translate(ax, ay);
   rotate(ang);
@@ -1838,8 +1838,8 @@ function drawGiantShadowBand() {
   dc.setAlpha(95);
   stroke(dc);
   strokeWeight(4.5);
-  for (let i = 0; i < 8; i++) {
-    const t = 0.14 + i * 0.105;
+  for (let i = 0; i < 10; i++) {
+    const t = 0.10 + i * 0.085;
     const dx = L * t, dy = 2;
     line(dx + 3.5, dy - 11, dx - 3.5, dy + 11);
   }
