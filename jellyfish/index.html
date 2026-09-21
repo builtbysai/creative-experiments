@@ -534,8 +534,8 @@ void main(){
   vec3 col=uTint*(body*(0.10+0.06*dome)+fres*0.42);
   col+=uDeep*body*0.16*dome;
   col+=scol*(0.55+0.60*glowPulse);
-  col+=uRimC*(fres*0.55+ring*0.85)*(0.35+0.45*uGlow);
-  col+=vec3(.55,.80,.95)*ca*.12*(0.30+0.70*body);
+  col+=uRimC*(fres*0.42+ring*0.60)*(0.35+0.40*uGlow);
+  col+=vec3(.55,.80,.95)*ca*.09*(0.30+0.70*body);
   col+=uFlashC*uFlash*(fres*.8+body*.35);
 
   float alpha=clamp(body*.30*(0.5+0.5*dome)+fres*.50+ring*.30+stru*.30,0.,.90);
@@ -742,7 +742,7 @@ class Jelly {
       chains.push({ chain, a, aT:T.anchorT!==undefined?T.anchorT:1, pts:chain.p,
         width0:T.width*this.scale*rr(0.8,1.25),
         colA:new THREE.Color(this.col.tentA), colB:new THREE.Color(this.col.tentB),
-        alpha:T.alpha*(this.hero?1.25:1), frill:0, ph:rr(0,9) });
+        alpha:T.alpha*(this.hero?1.0:1)*rr(0.45,1.0), frill:0, ph:rr(0,9) });
     }
     this.tentChains=chains;
     this.tentRibbons=new RibbonSet(chains,{renderOrder:14});
