@@ -120,7 +120,7 @@ let composer = null, bloomPass = null;
 if (!REVIEW) {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.65, 0.78);
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.45, 0.70, 0.80);
   composer.addPass(bloomPass);
   composer.addPass(new OutputPass());
 }
@@ -212,7 +212,7 @@ function makeSnow(count, near){
   const pts=new THREE.Points(g,m); pts.frustumCulled=false; pts.renderOrder=-500;
   return pts;
 }
-const snowFar = makeSnow(REVIEW?80:260,false), snowNear = makeSnow(REVIEW?20:70,true);
+const snowFar = makeSnow(REVIEW?80:320,false), snowNear = makeSnow(REVIEW?20:100,true);
 scene.add(snowFar, snowNear);
 
 // Distant jelly silhouettes for parallax depth (cheap soft sprites)
@@ -224,7 +224,7 @@ const silGroup = new THREE.Group(); scene.add(silGroup);
   gr.addColorStop(0,'rgba(150,200,235,0.55)'); gr.addColorStop(.55,'rgba(120,175,220,0.20)'); gr.addColorStop(1,'rgba(120,175,220,0)');
   x.fillStyle=gr; x.beginPath(); x.ellipse(64,70,52,40,0,0,7); x.fill();
   const tex=new THREE.CanvasTexture(c);
-  for(let i=0;i<7;i++){
+  for(let i=0;i<11;i++){
     const m=new THREE.SpriteMaterial({ map:tex, transparent:true, opacity:rr(.10,.20), depthWrite:false, fog:true, color:0x9fd0e8 });
     const s=new THREE.Sprite(m);
     const sc=rr(2.5,6); s.scale.set(sc,sc*.8,1);
@@ -260,7 +260,7 @@ class VerletChain {
       const cur=this.p[i], old=this.prev[i];
       const vx=(cur.x-old.x)*drag, vy=(cur.y-old.y)*drag, vz=(cur.z-old.z)*drag;
       old.copy(cur);
-      const wob = Math.sin(time*0.95 + i*0.85 + cur.x*2.2 + cur.y*1.7)*curl;
+      const wob = Math.sin(time*0.8 + i*0.5 + cur.x*1.4 + cur.y*1.1)*curl*0.8;
       cur.x += vx + flow.x*0.00055*dt2 + wob*dt2*0.65;
       cur.y += vy + (flow.y*0.00028 - gravity*0.7)*dt2;
       cur.z += vz + flow.z*0.00045*dt2 + Math.cos(time*0.65 + i*0.55 + cur.z)*curl*0.45*dt2;
@@ -330,7 +330,7 @@ class RibbonSet {
         let w=c.width0*Math.pow(1-t,0.75)+c.width0*0.12;
         if(c.frill) w*=1+c.frill*Math.sin(t*22+time*this.frillSpeed+c.ph);
         const fade=Math.pow(1-t,1.1);
-        const glow=(0.55+0.45*Math.sin(time*1.7+c.ph+t*5.))*fade;
+        const glow=(0.74+0.26*Math.sin(time*1.1+c.ph+t*3.0))*fade;
         const r=(c.colA.r+(c.colB.r-c.colA.r)*t)*glow*c.alpha;
         const g2=(c.colA.g+(c.colB.g-c.colA.g)*t)*glow*c.alpha;
         const b=(c.colA.b+(c.colB.b-c.colA.b)*t)*glow*c.alpha;
@@ -352,7 +352,7 @@ class RibbonSet {
 const SPECIES = {
   moon: {
     label:'Moon', chip:'#bfeaff',
-    bell:{ width:1.30, height:0.62, dome:0.80, box:0, groove:0, lobes:8, scallop:0.016, opacity:0.50, pattern:0 },
+    bell:{ width:1.30, height:0.62, dome:0.80, box:0, groove:0, lobes:8, scallop:0.016, opacity:0.46, pattern:0 },
     tent:{ count:110, seg:7, len:[0.35,0.70], width:0.012, alpha:0.50, down:-0.55, outward:0.30, clustered:0 },
     arms:{ count:4, ribs:3, seg:16, len:[1.7,2.5], width:0.038, alpha:0.20, frill:0.55 },
     gonads:{ count:4, radius:0.30, tube:0.075 },
@@ -385,8 +385,8 @@ const SPECIES = {
   },
   crown: {
     label:'Crown', chip:'#ff6a5e',
-    bell:{ width:1.08, height:0.95, dome:1.0, box:0, groove:0.16, lobes:12, scallop:0.022, opacity:0.42, pattern:3 },
-    tent:{ count:12, seg:16, len:[2.2,3.4], width:0.045, alpha:0.75, down:-0.85, outward:0.22, clustered:0 },
+    bell:{ width:1.14, height:0.95, dome:1.0, box:0, groove:0.16, lobes:12, scallop:0.022, opacity:0.52, pattern:3 },
+    tent:{ count:12, seg:16, len:[2.5,3.1], width:0.050, alpha:0.62, down:-0.85, outward:0.10, clustered:0, anchorT:0.62 },
     arms:{ count:4, ribs:2, seg:18, len:[2.4,3.4], width:0.085, alpha:0.60, frill:0.35 },
     gonads:{ count:8, radius:0.22, tube:0.055 },
     swim:{ pulseHz:0.20, power:0.9, glide:0.990, curiosity:0.0, lag:1.2 },
@@ -397,11 +397,11 @@ const SPECIES = {
   mane: {
     label:"Lion's mane", chip:'#ff9d7a',
     bell:{ width:1.35, height:0.95, dome:0.95, box:0, groove:0, lobes:8, scallop:0.028, opacity:0.58, pattern:4 },
-    tent:{ count:210, seg:10, len:[2.8,4.6], width:0.014, alpha:0.42, down:-0.80, outward:0.35, clustered:8 },
+    tent:{ count:210, seg:10, len:[2.8,4.6], width:0.014, alpha:0.36, down:-0.80, outward:0.35, clustered:8 },
     arms:{ count:8, ribs:3, seg:16, len:[2.2,3.2], width:0.10, alpha:0.45, frill:0.6 },
     gonads:{ count:8, radius:0.26, tube:0.06 },
     swim:{ pulseHz:0.16, power:1.1, glide:0.991, curiosity:-0.25, lag:1.3 },
-    phys:{ drag:0.991, grav:0.00013, stiff:0.93, curl:0.00014 },
+    phys:{ drag:0.991, grav:0.00013, stiff:0.93, curl:0.00010 },
     col:{ bell:0xf2c9a0, deep:0xd8956a, warm:0xff9d7a, rim:0xffe4c8, struct:0xf0a87e,
           tentA:0xffc4a0, tentB:0xe07a5e, armA:0xffd4b0, armB:0xd86a5a, gonad:0xff9d6a, flash:0xffc4a0 }
   },
@@ -448,7 +448,7 @@ void main(){
 // The jelly look = fresnel rim + readable inner structures + caustic shimmer.
 const BELL_FRAG = `
 varying vec2 vUv; varying vec3 vN; varying vec3 vW;
-uniform float uTime, uGlow, uSeed, uPattern, uFlash;
+uniform float uTime, uGlow, uSeed, uPattern, uFlash, uOpacity;
 uniform vec3 uTint, uDeep, uWarm, uRimC, uStruct, uFlashC;
 float h21(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float vn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f);
@@ -482,7 +482,7 @@ void main(){
     }
     gon*=smoothstep(.12,.6,r);
     float ring=1.-smoothstep(0.,.05,abs(r-.88+vn(vec2(az*3.,uTime*.02))*.02));
-    stru+=gon*.8+ring*.35; scol+=uWarm*(gon*.8+ring*.15);
+    stru+=gon*1.0+ring*.40; scol+=uWarm*(gon*1.1+ring*.20);
   } else if(uPattern<1.5){
     // nettle: warm radial striping + rim
     float st=pow(1.-abs(sin(az*8.)),4.)*smoothstep(.15,.95,r);
@@ -527,15 +527,21 @@ void main(){
   ca*=.5;
 
   float glowPulse=.5+.5*uGlow;
-  vec3 col=uTint*(body*.16+fres*.85);
-  col+=uDeep*body*.20;
-  col+=scol*(0.45+0.65*glowPulse);
-  col+=uRimC*fres*(0.30+0.40*uGlow);
-  col+=vec3(.55,.80,.95)*ca*.14*(0.30+0.70*body);
-  col+=uFlashC*uFlash*(fres*.8+body*.4);
+  // volumetric falloff: the dome wall reads thicker at the apex, luminous at the margin
+  float dome=1.-0.45*r;
+  // crisp luminous margin ring, the true bright edge of a medusa
+  float ring=1.-smoothstep(0.,0.028,abs(r-0.955));
+  vec3 col=uTint*(body*(0.10+0.06*dome)+fres*0.42);
+  col+=uDeep*body*0.16*dome;
+  col+=scol*(0.55+0.60*glowPulse);
+  col+=uRimC*(fres*0.55+ring*0.85)*(0.35+0.45*uGlow);
+  col+=vec3(.55,.80,.95)*ca*.12*(0.30+0.70*body);
+  col+=uFlashC*uFlash*(fres*.8+body*.35);
 
-  float alpha=clamp(body*.30+fres*.62+stru*.30,0.,.92);
-  alpha*=0.55+0.45*glowPulse;
+  float alpha=clamp(body*.30*(0.5+0.5*dome)+fres*.50+ring*.30+stru*.30,0.,.90);
+  // moon jellies are window-clear through the middle; the structure lives at the margin
+  if(uPattern<0.5){ alpha*=mix(0.45,1.0,smoothstep(0.10,0.92,r)); }
+  alpha*=uOpacity*(0.55+0.45*glowPulse);
   gl_FragColor=vec4(col,alpha);
 }`;
 
@@ -626,7 +632,7 @@ class Jelly {
     this.radial=radial; this.rings=rings;
     this.bellUniforms={
       uTime:{value:0}, uGlow:{value:0}, uSeed:{value:this.seed},
-      uPattern:{value:B.pattern}, uFlash:{value:0},
+      uPattern:{value:B.pattern}, uFlash:{value:0}, uOpacity:{value:B.opacity},
       uTint:{value:new THREE.Color(this.col.bell)},
       uDeep:{value:new THREE.Color(this.col.deep)},
       uWarm:{value:new THREE.Color(this.col.warm)},
@@ -716,7 +722,7 @@ class Jelly {
         const cl=i%T.clustered, per=Math.ceil(T.count/T.clustered), k=Math.floor(i/T.clustered);
         a=(cl/T.clustered)*TAU+((k/Math.max(1,per-1))-0.5)*0.42+rr(-0.02,0.02);
       } else a=(i/T.count)*TAU+rr(-0.012,0.012);
-      const anchor=this.bellPoint(1,a);
+      const anchor=this.bellPoint(T.anchorT!==undefined?T.anchorT:1,a);
       const len=rr(T.len[0],T.len[1])*this.scale;
       const dir=new THREE.Vector3(Math.sin(a)*T.outward, T.down, Math.cos(a)*T.outward).normalize();
       const ipts=[anchor.clone()];
@@ -729,11 +735,11 @@ class Jelly {
           p.x+=Math.cos(ph)*rad; p.z+=Math.sin(ph)*rad;
         }
         p.y-=len*0.12*t*t;
-        p.x+=rr(-0.012,0.012)*len*t; p.z+=rr(-0.012,0.012)*len*t;
+        p.x+=rr(-0.006,0.006)*len*t; p.z+=rr(-0.006,0.006)*len*t;
         ipts.push(p);
       }
       const chain=new VerletChain(ipts);
-      chains.push({ chain, a, pts:chain.p,
+      chains.push({ chain, a, aT:T.anchorT!==undefined?T.anchorT:1, pts:chain.p,
         width0:T.width*this.scale*rr(0.8,1.25),
         colA:new THREE.Color(this.col.tentA), colB:new THREE.Color(this.col.tentB),
         alpha:T.alpha*(this.hero?1.25:1), frill:0, ph:rr(0,9) });
@@ -811,7 +817,7 @@ class Jelly {
     const P=this.sp.phys;
     if(this.tentChains){
       for(const c of this.tentChains){
-        c.chain.setAnchor(this.bellPoint(1,c.a));
+        c.chain.setAnchor(this.bellPoint(c.aT,c.a));
         c.chain.step(dt,time,flow,P.drag,P.grav,P.stiff,P.curl);
       }
       this.tentRibbons.update(camera.position,time);
@@ -930,11 +936,11 @@ function updateSpeciesChips(){
 buildSpeciesChips();
 
 function spawnAll(){
-  const target=REVIEW?6:(isMobile?11:15);
+  const target=REVIEW?6:(isMobile?12:18);
   // hero moon jelly, front and center
   jellies.push(new Jelly({ species:'moon', position:new THREE.Vector3(isMobile?0:0.4,isMobile?-0.3:0.4,-0.8),
     scale:isMobile?1.05:1.3, seed:3.7, detail:1, hero:true }));
-  const order=['nettle','crystal','crown','mane','box','moon','nettle','crystal','mane','crown','box','moon','nettle','mane'];
+  const order=['nettle','crystal','crown','mane','box','moon','nettle','crystal','mane','crown','box','moon','nettle','mane','crystal','box','moon','crown'];
   let oi=0, placed=1, attempts=0;
   while(placed<target && attempts<300){
     attempts++;
@@ -1014,7 +1020,14 @@ function releaseMotes(p,n=16){
   }
 }
 // tiny debug hook for automated review (no effect on the experience)
-if(new URLSearchParams(location.search).has('review')) window.__jf={ get jellies(){return jellies}, get ripples(){return ripples} };
+if(new URLSearchParams(location.search).has('review')) window.__jf={
+  get jellies(){return jellies}, get ripples(){return ripples},
+  get pointerOn(){return pointerOn},
+  get pointerSm(){return {x:pointerSm.x,y:pointerSm.y}},
+  screenXY(i){ const j=jellies[i]; const v=j.group.position.clone().project(camera);
+    const r=renderer.domElement.getBoundingClientRect();
+    return { x:(v.x*0.5+0.5)*r.width, y:(-v.y*0.5+0.5)*r.height }; }
+};
 renderer.domElement.addEventListener('pointerdown', (e)=>{
   setPointer(e);
   raycaster.setFromCamera(pointerNdc,camera);
