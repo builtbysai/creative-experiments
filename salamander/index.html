@@ -64,17 +64,6 @@ function halfWidth(i) {
 }
 function hash(n) { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); }
 
-function solveIK(hx, hy, fx, fy, a, b, bendSign) {
-  let dx = fx - hx, dy = fy - hy;
-  let d = Math.hypot(dx, dy);
-  const maxD = a + b - 1;
-  if (d > maxD) { dx *= maxD / d; dy *= maxD / d; d = maxD; }
-  if (d < 1) d = 1;
-  const ux = dx / d, uy = dy / d;
-  const x = (a * a - b * b + d * d) / (2 * d);
-  const y = Math.sqrt(Math.max(0, a * a - x * x));
-  return { kx: hx + ux * x - uy * y * bendSign, ky: hy + uy * x + ux * y * bendSign };
-}
 function taperedSeg(x1, y1, x2, y2, w1, w2, color) {
   const dx = x2 - x1, dy = y2 - y1, d = Math.hypot(dx, dy) || 1;
   const px = -dy / d, py = dx / d;
@@ -129,17 +118,17 @@ for (let k = 0; k < 40; k++) {
 
 // legs
 function mkLeg(joint, side, front) {
-  return { joint, side, front, phaseOffset: 0, L1: 14, L2: 12,
+  return { joint, side, front, L1: 14, L2: 12,
            foot: { x: 0, y: 0 }, planted: true,
-           from: { x: 0, y: 0 }, to: { x: 0, y: 0 },
+           from: { x: 0, y: 0 }, to: { x: 0, y: 0 }, swingT: 1,
+           bowX: 0, bowY: 0,
+           thresh: 0.85 + Math.random() * 0.3, // per-leg step eagerness
            toes: front ? 4 : 5, load: 0, peel: 0 };
 }
 const legs = [];
 [{ g: 6, side: -1, front: true }, { g: 6, side: 1, front: true },
  { g: 13, side: -1, front: false }, { g: 13, side: 1, front: false }].forEach((d, di) => {
   const leg = mkLeg(d.g, d.side, d.front);
-  // research footfall sequence (touchdown phases): LH 0, LF 0.30, RH 0.50, RF 0.80
-  leg.phaseOffset = [0.30, 0.80, 0.00, 0.50][di];
   legs.push(leg);
 });
 function legAnchor(leg) {
@@ -226,53 +215,50 @@ function step(dt) {
   }
   refreshHeadings();
 
-  // legs: clock-driven lateral-sequence walk, duty factor 0.75.
-  // each foot touches down at its phase, stays planted 75% of the stride
-  // (world frame, body moves over it), swings 25%. Crouch peaks mid-stance,
-  // toes peel just after lift-off.
-  head.stridePhase = (head.stridePhase + moved / (64 * S)) % 1;
-  const walking = moved > 0.004;
-  const DUTY = 0.75;
+  // legs: RujiK stepping. No gait clock. Each foot is assigned to its body
+  // segment; every frame we guesstimate where the foot WOULD be if it had
+  // just finished a step (the neutral foothold, in the body's frame). The
+  // foot stays planted in world space until the hip has carried the foothold
+  // more than one leg-length away — then it steps to the new foothold.
+  // Steps emerge from body movement, so the walk matches the motion exactly.
+  const STEP_REACH = 21 * S;
+  const SWING_DUR = 0.16;
   for (const leg of legs) {
     const an = legAnchor(leg);
-    const reach = (leg.L1 + leg.L2) * S * 0.9;
-    let cyc = (head.stridePhase - leg.phaseOffset) % 1;
-    if (cyc < 0) cyc += 1;
-    if (!walking) {
-      if (!leg.planted) {
-        leg.foot.x += (leg.to.x - leg.foot.x) * 0.2;
-        leg.foot.y += (leg.to.y - leg.foot.y) * 0.2;
-        if (Math.hypot(leg.to.x - leg.foot.x, leg.to.y - leg.foot.y) < 1) leg.planted = true;
-      }
-      leg.load = 0; leg.peel = 0;
-      continue;
-    }
-    if (cyc < DUTY) {
-      // stance
-      leg.planted = true;
-      // safety: never let a planted foot overstretch the leg
-      const dx = leg.foot.x - an.x, dy = leg.foot.y - an.y;
+    const h = hd[leg.joint];
+    const ox = -Math.sin(h) * leg.side, oy = Math.cos(h) * leg.side;
+    const stepPos = footTarget(leg, an, 21);
+    if (leg.planted) {
+      const dx = leg.foot.x - stepPos.x, dy = leg.foot.y - stepPos.y;
       const d = Math.hypot(dx, dy);
-      if (d > reach && d > 0.01) {
-        leg.foot.x = an.x + dx / d * reach;
-        leg.foot.y = an.y + dy / d * reach;
-      }
-      leg.load = Math.sin(Math.PI * cyc / DUTY);
+      leg.load = Math.min(1, d / (STEP_REACH * leg.thresh));
       leg.peel = 0;
-    } else {
-      // swing
-      if (leg.planted) {
+      if (d > STEP_REACH * leg.thresh) {
         leg.planted = false;
+        leg.swingT = 0;
         leg.from.x = leg.foot.x; leg.from.y = leg.foot.y;
-        const t = footTarget(leg, an, 23);
-        leg.to.x = t.x; leg.to.y = t.y;
+        leg.to.x = stepPos.x + (Math.random() * 2 - 1) * 3 * S;
+        leg.to.y = stepPos.y + (Math.random() * 2 - 1) * 3 * S;
+        // swing bows outward (lift read in top-down)
+        const sx = leg.to.x - leg.from.x, sy = leg.to.y - leg.from.y;
+        const sd = Math.hypot(sx, sy) || 1;
+        let bx = -sy / sd, by = sx / sd;
+        if (bx * ox + by * oy < 0) { bx = -bx; by = -by; }
+        leg.bowX = bx; leg.bowY = by;
       }
-      const st = (cyc - DUTY) / (1 - DUTY);
-      const e = 1 - Math.pow(1 - st, 3);
-      leg.foot.x = leg.from.x + (leg.to.x - leg.from.x) * e;
-      leg.foot.y = leg.from.y + (leg.to.y - leg.from.y) * e;
+    } else {
+      leg.swingT += dt / SWING_DUR;
+      const t = Math.min(1, leg.swingT);
+      const e = t * t * (3 - 2 * t);
+      const bow = Math.sin(Math.PI * t) * 4 * S;
+      leg.foot.x = leg.from.x + (leg.to.x - leg.from.x) * e + leg.bowX * bow;
+      leg.foot.y = leg.from.y + (leg.to.y - leg.from.y) * e + leg.bowY * bow;
       leg.load = 0;
-      leg.peel = Math.max(0, 1 - st / 0.35);
+      leg.peel = Math.max(0, 1 - t / 0.35); // toes trail at lift-off
+      if (t >= 1) {
+        leg.planted = true;
+        leg.foot.x = leg.to.x; leg.foot.y = leg.to.y;
+      }
     }
   }
 }
