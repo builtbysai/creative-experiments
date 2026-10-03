@@ -5,241 +5,496 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Salamander · a procedural sketch</title>
 <style>
-  html, body { margin: 0; padding: 0; overflow: hidden; background: #02594c; height: 100%; }
-  canvas { display: block; }
-  #hint {
-    position: fixed; left: 12px; bottom: 10px; z-index: 2;
-    font: 13px/1.4 monospace; color: rgba(255,255,255,.55);
-    pointer-events: none; user-select: none;
-  }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #02594c; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="hint">click / tap: split the body &nbsp;·&nbsp; N: toggle numbers</div>
 <script>
 'use strict';
-// Procedural salamander, rebuilt from Hans's June 2020 sketch.
-// Nine segments: a wandering head and eight body cells. Each cell is a
-// flocking agent that seeks a slot on the spine trailing behind the head.
-// Slots are claimed greedily by proximity, so after a split the body
-// re-forms in whatever order the cells arrive in, exactly like the original.
-// Click scatters the body; the flock pulls it back together.
-
+/*
+ * Procedural salamander.
+ *
+ * A spine chain posed by follow-the-leader constraints, rendered as a
+ * width-envelope silhouette (fire-salamander colors on the original
+ * teal). Four sprawling legs with analytic 2-bone IK, feet planted in
+ * the world frame, lateral-sequence walk gait. Standing lateral wave,
+ * trunk antiphase to tail.
+ *
+ * Chop it: click near the head and the head comes off — the torso
+ * chases it and reconnects at the neck. Click near the tail and the
+ * tail comes off — it swims back and reconnects at the waist.
+ */
 const TEAL = '#02594c';
-const INK = 'rgba(240,244,242,0.92)';
-const N = 9;                 // 1 head + 8 body cells
-const SPACING = 34;          // spine slot spacing (px at 800x600-ish scale)
-const HEAD_R = 17, BODY_R = 14;
+const BODY = '#232a20';
+const BODY_EDGE = 'rgba(240,235,210,0.4)';
+const SPOT = '#e3c33f';
+const EYE = '#f4e3c0';
+const PUPIL = '#101310';
+const BLUSH = 'rgba(255,150,140,0.45)';
+const WOUND = '#4a3f35';
 
-let W = 0, H = 0, S = 1;     // S = scale relative to the 800x600 original
-const cv = document.getElementById('c');
-const ctx = cv.getContext('2d');
+const N = 26;          // joints in the whole animal: 0 = snout, 25 = tail tip
+const NECK_CUT = 6;    // head part keeps joints 0..6 (forelegs live at 5)
+const WAIST_CUT = 12; // tail part keeps joints 12..25
+const SEG = 17;        // rest length between joints (px at S=1)
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, S = 1, DPR = 1;
 
 function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
   W = window.innerWidth; H = window.innerHeight;
-  cv.width = W; cv.height = H;
-  S = Math.min(W / 800, H / 600);
+  S = Math.min(W, H) / 620;
+  canvas.width = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 }
 window.addEventListener('resize', resize);
 resize();
 
-// deterministic-ish rng for the odd wobble; Math.random is fine here
-const rnd = (a, b) => a + Math.random() * (b - a);
-
-class Seg {
-  constructor(i) {
-    this.i = i;
-    this.head = i === 0;
-    this.r = (this.head ? HEAD_R : BODY_R) * S;
-    this.x = rnd(W * 0.3, W * 0.7);
-    this.y = rnd(H * 0.3, H * 0.7);
-    const a = rnd(0, Math.PI * 2);
-    this.vx = Math.cos(a); this.vy = Math.sin(a);
-    this.heading = a;
-    this.wanderT = rnd(0, 1000);
-    this.slot = -1;
-  }
-  get speed() { return Math.hypot(this.vx, this.vy); }
-  steer(tx, ty, maxSpeed, maxForce, arrive) {
-    let dx = tx - this.x, dy = ty - this.y;
-    const d = Math.hypot(dx, dy) || 1;
-    let sp = maxSpeed;
-    if (arrive && d < 90 * S) sp = maxSpeed * (d / (90 * S));
-    dx = dx / d * sp; dy = dy / d * sp;
-    let fx = dx - this.vx, fy = dy - this.vy;
-    const f = Math.hypot(fx, fy) || 1;
-    if (f > maxForce) { fx = fx / f * maxForce; fy = fy / f * maxForce; }
-    this.vx += fx; this.vy += fy;
-  }
-  update() {
-    const sp = this.speed, max = (this.head ? 2.1 : 3.1) * S;
-    if (sp > max) { this.vx = this.vx / sp * max; this.vy = this.vy / sp * max; }
-    // gentle drag so impulses decay
-    this.vx *= 0.995; this.vy *= 0.995;
-    this.x += this.vx; this.y += this.vy;
-    if (sp > 0.2) this.heading = Math.atan2(this.vy, this.vx);
-    // soft containment
-    const m = 70 * S;
-    if (this.x < m) this.vx += 0.06 * S;
-    if (this.x > W - m) this.vx -= 0.06 * S;
-    if (this.y < m) this.vy += 0.06 * S;
-    if (this.y > H - m) this.vy -= 0.06 * S;
-  }
-  draw(showNums) {
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = Math.max(1.5, 2 * S);
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-    ctx.stroke();
-    // heading tick, like the original
-    const tx = this.x + Math.cos(this.heading) * this.r;
-    const ty = this.y + Math.sin(this.heading) * this.r;
-    ctx.beginPath();
-    ctx.moveTo(this.x + Math.cos(this.heading) * this.r * 0.45,
-               this.y + Math.sin(this.heading) * this.r * 0.45);
-    ctx.lineTo(tx, ty);
-    ctx.stroke();
-    if (showNums && !this.head) {
-      ctx.fillStyle = 'rgba(240,244,242,0.75)';
-      ctx.font = `${Math.max(11, 13 * S)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText(String(this.i + 1), this.x, this.y - this.r - 6 * S);
-    } else if (showNums) {
-      ctx.fillStyle = 'rgba(240,244,242,0.75)';
-      ctx.font = `${Math.max(11, 13 * S)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText('1', this.x, this.y - this.r - 6 * S);
-    }
-  }
+function halfWidth(i) {
+  if (i <= 2) return 7 + i * 3.1;                        // round snout -> eyes
+  if (i <= 6) return 13.2 - (i - 2) * 1.05;              // head -> neck
+  if (i <= 11) return 11.5 + 3.5 * Math.sin(Math.PI * (i - 6) / 5); // chubby torso
+  if (i === 12) return 8.5;
+  return 8.5 * Math.pow(0.82, i - 12);                  // tail taper
 }
-
-const segs = [];
-for (let i = 0; i < N; i++) segs.push(new Seg(i));
-const head = segs[0];
-let showNums = true;
-
-// head trail: the body follows where the head HAS BEEN, not a rigid
-// line behind its current heading. This is what makes the chain curve
-// smoothly like the original.
-const trail = [];
-const TRAIL_GAP = 18; // frames between spine slots
-
-// slot assignment is sticky: computed greedily at split time, then kept.
-// the cells take whichever slot they reach first, so the chain re-forms
-// in scrambled order like the original, without mid-swim target swapping.
-let assigned = new Array(N).fill(-1);
-function assignSlots() {
-  const sp = slots();
-  const claimed = new Array(N - 1).fill(false);
-  const order = [];
-  for (let i = 1; i < N; i++) {
-    for (let k = 0; k < N - 1; k++) {
-      const dx = segs[i].x - sp[k][0], dy = segs[i].y - sp[k][1];
-      order.push([dx * dx + dy * dy, i, k]);
-    }
-  }
-  order.sort((a, b) => a[0] - b[0]);
-  assigned = new Array(N).fill(-1);
-  for (const [, i, k] of order) {
-    if (assigned[i] === -1 && !claimed[k]) { assigned[i] = k; claimed[k] = true; }
-  }
-}
-
-function slots() {
-  const out = [];
-  for (let k = 1; k < N; k++) {
-    const idx = Math.min(trail.length - 1, k * TRAIL_GAP);
-    if (idx >= 0) out.push([trail[idx][0], trail[idx][1]]);
-    else out.push([head.x - Math.cos(head.heading) * k * SPACING * S,
-                   head.y - Math.sin(head.heading) * k * SPACING * S]);
-  }
-  return out;
-}
-
-// value-noise wander for the head
+function hash(n) { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); }
 function noise1(t) {
-  return Math.sin(t * 0.9) * 0.55 + Math.sin(t * 2.17 + 1.3) * 0.3 + Math.sin(t * 4.71 + 4.1) * 0.15;
+  return Math.sin(t) * 0.55 + Math.sin(t * 2.13 + 1.7) * 0.3 + Math.sin(t * 4.71 + 4.2) * 0.15;
+}
+function solveIK(hx, hy, fx, fy, a, b, bendSign) {
+  let dx = fx - hx, dy = fy - hy;
+  let d = Math.hypot(dx, dy);
+  const maxD = a + b - 1;
+  if (d > maxD) { dx *= maxD / d; dy *= maxD / d; d = maxD; }
+  if (d < 1) d = 1;
+  const ux = dx / d, uy = dy / d;
+  const x = (a * a - b * b + d * d) / (2 * d);
+  const y = Math.sqrt(Math.max(0, a * a - x * x));
+  return { kx: hx + ux * x - uy * y * bendSign, ky: hy + uy * x + ux * y * bendSign };
 }
 
-function slots() {
-  // slot k sits k*SPACING behind the head along its heading
-  const hx = Math.cos(head.heading), hy = Math.sin(head.heading);
-  const out = [];
-  for (let k = 1; k < N; k++) {
-    out.push([head.x - hx * k * SPACING * S, head.y - hy * k * SPACING * S]);
-  }
-  return out;
+// ---------------- parts ----------------
+// A part is a contiguous run of joints with its own motion state.
+// part = { pts, hd, legs, hasHead, hasTail, g0, leader, ... }
+const parts = [];
+
+function mkLeg(joint, side, front) {
+  return {
+    joint, side, front, phaseOffset: 0,
+    L1: 34, L2: 30,
+    foot: { x: 0, y: 0 }, planted: true, stepT: 0,
+    from: { x: 0, y: 0 }, to: { x: 0, y: 0 }, cool: 0
+  };
 }
 
-function step() {
-  // head wanders: steer toward a point ahead, nudged sideways by smooth noise
-  head.wanderT += 0.005;
-  const wa = noise1(head.wanderT) * 0.35;
-  const hx = Math.cos(head.heading), hy = Math.sin(head.heading);
-  head.steer(
-    head.x + hx * 80 * S - hy * wa * 80 * S,
-    head.y + hy * 80 * S + hx * wa * 80 * S,
-    2.0 * S, 0.045 * S, false
-  );
-  head.update();
-
-  // record the trail AFTER the head moves
-  trail.unshift([head.x, head.y]);
-  if (trail.length > N * TRAIL_GAP + 40) trail.pop();
-
-  const sp = slots();
-
-  for (let i = 1; i < N; i++) {
-    const s = segs[i];
-    const t = sp[assigned[i] === -1 ? 0 : assigned[i]];
-    s.steer(t[0], t[1], 3.2 * S, 0.1 * S, true);
-    // separation: don't stack on each other
-    for (let j = 1; j < N; j++) {
-      if (j === i) continue;
-      const o = segs[j];
-      const dx = s.x - o.x, dy = s.y - o.y;
-      const d = Math.hypot(dx, dy);
-      const minD = (s.r + o.r) * 1.05;
-      if (d > 0.01 && d < minD) {
-        s.vx += (dx / d) * 0.08 * S;
-        s.vy += (dy / d) * 0.08 * S;
-      }
+function makePart(pts, hasHead, hasTail, g0) {
+  const p = {
+    pts: pts.map(q => ({ x: q.x, y: q.y })),
+    hd: pts.map(() => 0),
+    legs: [], hasHead, hasTail, g0,
+    leader: null, attachR: 0, sepT: 0,
+    hx: pts[0].x, hy: pts[0].y, heading: -Math.PI / 2,
+    wanderT: Math.random() * 100,
+    speed: 1.7, stridePhase: Math.random(), wavePhase: Math.random() * 6,
+    kind: 'mid'
+  };
+  p.kind = hasHead && hasTail ? 'whole' : hasHead ? 'head' : hasTail ? 'tail' : 'mid';
+  // legs whose global joint falls inside this part
+  const legDefs = [
+    { g: 5, side: -1, front: true }, { g: 5, side: 1, front: true },
+    { g: 10, side: -1, front: false }, { g: 10, side: 1, front: false },
+  ];
+  const order = [2, 0, 3, 1]; // LH -> LF -> RH -> RF lateral sequence
+  legDefs.forEach((d, di) => {
+    if (d.g >= g0 && d.g < g0 + pts.length) {
+      const leg = mkLeg(d.g - g0, d.side, d.front);
+      leg.phaseOffset = order[di] * 0.25;
+      p.legs.push(leg);
     }
-    s.update();
+  });
+  refreshHeadings(p);
+  // plant feet near their anchors
+  for (const leg of p.legs) {
+    const a = legAnchor(p, leg);
+    const h = p.hd[leg.joint];
+    const px = -Math.sin(h) * leg.side, py = Math.cos(h) * leg.side;
+    leg.foot.x = a.x + px * 40 * S + Math.cos(h) * (leg.front ? 12 : -8) * S;
+    leg.foot.y = a.y + py * 40 * S + Math.sin(h) * (leg.front ? 12 : -8) * S;
+  }
+  return p;
+}
+
+function refreshHeadings(p) {
+  const n = p.pts.length;
+  for (let i = 0; i < n; i++) {
+    const a = p.pts[Math.max(0, i - 1)], b = p.pts[Math.min(n - 1, i + 1)];
+    p.hd[i] = Math.atan2(a.y - b.y, a.x - b.x);
+  }
+}
+
+function legAnchor(p, leg) {
+  const j = p.pts[leg.joint];
+  const px = -Math.sin(p.hd[leg.joint]), py = Math.cos(p.hd[leg.joint]);
+  return { x: j.x + px * leg.side * halfWidth(leg.joint + p.g0) * S * 0.9,
+           y: j.y + py * leg.side * halfWidth(leg.joint + p.g0) * S * 0.9 };
+}
+
+// the whole animal at load
+(function init() {
+  const cx = W / 2, cy = H / 2, h0 = -Math.PI / 2;
+  const pts = [];
+  for (let i = 0; i < N; i++) {
+    pts.push({ x: cx - Math.cos(h0) * SEG * S * i, y: cy - Math.sin(h0) * SEG * S * i });
+  }
+  const p = makePart(pts, true, true, 0);
+  p.hx = cx; p.hy = cy; p.heading = h0;
+  parts.push(p);
+})();
+
+function chop(part, localCut) {
+  // split part into front (0..localCut) and back (localCut..end)
+  const n = part.pts.length;
+  if (localCut < 3 || localCut > n - 4) return false;
+  const front = makePart(part.pts.slice(0, localCut + 1), part.hasHead, false, part.g0);
+  const back = makePart(part.pts.slice(localCut), false, part.hasTail, part.g0 + localCut);
+  front.hx = part.hx; front.hy = part.hy; front.heading = part.heading;
+  front.wanderT = part.wanderT; front.speed = part.speed;
+  front.leader = part.leader;
+  back.leader = front;
+  back.sepT = 90; // fly apart before the chase, so the cut reads
+  back.speed = 2.7;
+  // the rest of the chain now follows the new back part
+  for (const q of parts) if (q.leader === part) q.leader = back;
+  parts.splice(parts.indexOf(part), 1, front, back);
+  return true;
+}
+
+function mergeParts(lead, fol) {
+  const base = lead.pts.length;
+  // snap the junction, then concatenate
+  fol.pts[0].x = lead.pts[base - 1].x;
+  fol.pts[0].y = lead.pts[base - 1].y;
+  lead.pts = lead.pts.concat(fol.pts.slice(1));
+  lead.hd = lead.hd.concat(fol.hd.slice(1));
+  for (const leg of fol.legs) { leg.joint += base - 1; lead.legs.push(leg); }
+  lead.hasTail = fol.hasTail;
+  lead.kind = lead.hasHead && lead.hasTail ? 'whole' : lead.hasHead ? 'head' : lead.hasTail ? 'tail' : 'mid';
+  lead.speed = 1.7;
+  for (const q of parts) if (q.leader === fol) q.leader = lead;
+  parts.splice(parts.indexOf(fol), 1);
+}
+
+// ---------------- simulation ----------------
+function steerHead(p, tx, ty, dt, maxSp) {
+  const dx = tx - p.pts[0].x, dy = ty - p.pts[0].y;
+  const d = Math.hypot(dx, dy);
+  const want = Math.atan2(dy, dx);
+  let dh = want - p.heading;
+  while (dh > Math.PI) dh -= Math.PI * 2;
+  while (dh < -Math.PI) dh += Math.PI * 2;
+  p.heading += Math.max(-0.12 * dt, Math.min(0.12 * dt, dh * 0.2 * dt));
+  const sp = Math.min(maxSp, d * 0.08) * S * dt;
+  p.pts[0].x += Math.cos(p.heading) * sp;
+  p.pts[0].y += Math.sin(p.heading) * sp;
+  return sp;
+}
+
+function wanderHead(p, dt) {
+  p.wanderT += 0.005 * dt;
+  const wa = noise1(p.wanderT) * 0.5;
+  const cx = W / 2, cy = H / 2;
+  const dc = Math.hypot(p.pts[0].x - cx, p.pts[0].y - cy);
+  const edge = Math.min(W, H) * 0.38;
+  let steerA = 0;
+  if (dc > edge) {
+    const toC = Math.atan2(cy - p.pts[0].y, cx - p.pts[0].x);
+    let d = toC - p.heading;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    steerA = d * 0.06 * dt;
+  }
+  p.heading += wa * 0.028 * dt + steerA;
+  const sp = p.speed * S * dt;
+  p.pts[0].x += Math.cos(p.heading) * sp;
+  p.pts[0].y += Math.sin(p.heading) * sp;
+  return sp;
+}
+
+function stepPart(p, dt) {
+  let moved = 0;
+  if (!p.leader) {
+    moved = wanderHead(p, dt);
+  } else {
+    const stump = p.leader.pts[p.leader.pts.length - 1];
+    if (p.sepT > 0) {
+      // fresh chop: fly apart so the cut reads, then the chase begins
+      p.sepT -= dt;
+      const a = Math.atan2(p.pts[0].y - stump.y, p.pts[0].x - stump.x);
+      p.pts[0].x += Math.cos(a) * 2.2 * S * dt;
+      p.pts[0].y += Math.sin(a) * 2.2 * S * dt;
+      moved = 2.2 * S * dt;
+    } else {
+      moved = steerHead(p, stump.x, stump.y, dt, p.speed);
+    }
+    // rejoin: chase, then dock and snap on
+    const d = Math.hypot(p.pts[0].x - stump.x, p.pts[0].y - stump.y);
+    if (p.sepT <= 0) {
+      if (d < 34 * S) {
+        p.pts[0].x += (stump.x - p.pts[0].x) * 0.25;
+        p.pts[0].y += (stump.y - p.pts[0].y) * 0.25;
+        if (d < 15 * S && ++p.attachR > 8) { mergeParts(p.leader, p); return; }
+      } else p.attachR = 0;
+    }
+  }
+
+  p.stridePhase = (p.stridePhase + moved / (52 * S)) % 1;
+  p.wavePhase += 0.11 * dt;
+
+  // follow-the-leader chain
+  const seg = SEG * S, n = p.pts.length;
+  for (let i = 1; i < n; i++) {
+    const a = p.pts[i - 1], q = p.pts[i];
+    const dx = q.x - a.x, dy = q.y - a.y;
+    const d = Math.hypot(dx, dy) || 1;
+    q.x = a.x + dx / d * seg;
+    q.y = a.y + dy / d * seg;
+  }
+
+  // lateral wave: standing (trunk antiphase to tail) for walkers,
+  // traveling for the detached swimming tail
+  const amp = (p.kind === 'tail' ? 7 : 5) * S * Math.min(1, moved / (1.2 * S * dt + 0.001) * 0.5 + 0.25);
+  for (let i = 1; i < n; i++) {
+    let lat;
+    if (p.kind === 'tail') {
+      const u = i / (n - 1);
+      lat = amp * u * Math.sin(p.wavePhase * 1.6 - i * 0.55);
+    } else {
+      const env = i < 3 ? 0 : Math.sin(2 * Math.PI * (i - 3) / Math.max(4, n - 4));
+      lat = amp * env * Math.sin(p.wavePhase);
+    }
+    const a = p.pts[Math.max(0, i - 1)], b = p.pts[Math.min(n - 1, i + 1)];
+    const dx = a.x - b.x, dy = a.y - b.y;
+    const d = Math.hypot(dx, dy) || 1;
+    p.pts[i].x += -dy / d * lat;
+    p.pts[i].y += dx / d * lat;
+  }
+  refreshHeadings(p);
+
+  // legs
+  for (const leg of p.legs) {
+    leg.cool = Math.max(0, leg.cool - dt);
+    const an = legAnchor(p, leg);
+    if (leg.planted) {
+      const d = Math.hypot(leg.foot.x - an.x, leg.foot.y - an.y);
+      const reach = (leg.L1 + leg.L2) * S * 0.92;
+      const slot = (((p.stridePhase - leg.phaseOffset) % 1) + 1) % 1;
+      if (d > reach * 0.98 && slot < 0.3 && leg.cool <= 0 && moved > 0.01) {
+        const h = p.hd[leg.joint];
+        const px = -Math.sin(h) * leg.side, py = Math.cos(h) * leg.side;
+        leg.from.x = leg.foot.x; leg.from.y = leg.foot.y;
+        leg.to.x = an.x + px * 46 * S + Math.cos(h) * (leg.front ? 16 : -10) * S;
+        leg.to.y = an.y + py * 46 * S + Math.sin(h) * (leg.front ? 16 : -10) * S;
+        leg.stepT = 0; leg.planted = false;
+      }
+    } else {
+      leg.stepT += dt / 14;
+      const t = Math.min(1, leg.stepT);
+      const e = t * t * (3 - 2 * t);
+      leg.foot.x = leg.from.x + (leg.to.x - leg.from.x) * e;
+      leg.foot.y = leg.from.y + (leg.to.y - leg.from.y) * e;
+      if (t >= 1) { leg.planted = true; leg.cool = 10; }
+    }
+  }
+}
+
+// ---------------- drawing ----------------
+function drawLeg(p, leg) {
+  const a = legAnchor(p, leg);
+  const s = S;
+  const h = p.hd[leg.joint];
+  const px = -Math.sin(h) * leg.side, py = Math.cos(h) * leg.side;
+  const hx = Math.cos(h), hy = Math.sin(h);
+  const wx = leg.front ? -hx : hx, wy = leg.front ? -hy : hy;
+  const bs = (px * wx + py * wy) >= 0 ? 1 : -1;
+  const k = solveIK(a.x, a.y, leg.foot.x, leg.foot.y, leg.L1 * s, leg.L2 * s, bs);
+  ctx.strokeStyle = BODY;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 7 * s;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(k.kx, k.ky); ctx.stroke();
+  ctx.lineWidth = 5 * s;
+  ctx.beginPath(); ctx.moveTo(k.kx, k.ky); ctx.lineTo(leg.foot.x, leg.foot.y); ctx.stroke();
+  ctx.lineWidth = 2.2 * s;
+  const fa = Math.atan2(leg.foot.y - k.ky, leg.foot.x - k.kx);
+  for (let tI = -1; tI <= 1; tI++) {
+    const ta = fa + tI * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(leg.foot.x, leg.foot.y);
+    ctx.lineTo(leg.foot.x + Math.cos(ta) * 9 * s, leg.foot.y + Math.sin(ta) * 9 * s);
+    ctx.stroke();
+  }
+}
+
+function drawPart(p) {
+  const n = p.pts.length;
+  for (const leg of p.legs) drawLeg(p, leg);
+
+  const L = [], R = [];
+  for (let i = 0; i < n; i++) {
+    const px = -Math.sin(p.hd[i]), py = Math.cos(p.hd[i]);
+    const w = halfWidth(i + p.g0) * S;
+    L.push([p.pts[i].x + px * w, p.pts[i].y + py * w]);
+    R.push([p.pts[i].x - px * w, p.pts[i].y - py * w]);
+  }
+  ctx.beginPath();
+  ctx.moveTo(L[0][0], L[0][1]);
+  for (let i = 1; i < n; i++) ctx.lineTo(L[i][0], L[i][1]);
+  for (let i = n - 1; i >= 0; i--) ctx.lineTo(R[i][0], R[i][1]);
+  ctx.closePath();
+  ctx.fillStyle = BODY;
+  ctx.fill();
+  ctx.strokeStyle = BODY_EDGE;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // wound caps where it was chopped
+  ctx.fillStyle = WOUND;
+  if (!p.hasHead) {
+    const w = halfWidth(p.g0) * S;
+    ctx.beginPath(); ctx.arc(p.pts[0].x, p.pts[0].y, w * 0.9, 0, Math.PI * 2); ctx.fill();
+  }
+  if (!p.hasTail) {
+    const w = halfWidth(p.g0 + n - 1) * S;
+    ctx.beginPath(); ctx.arc(p.pts[n - 1].x, p.pts[n - 1].y, w * 0.9, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // dorsal spots
+  ctx.fillStyle = SPOT;
+  for (let i = 2; i < n - 1; i += 2) {
+    const gi = i + p.g0;
+    if (gi > 20) break;
+    const w = halfWidth(gi) * S;
+    const ox = (hash(gi * 3.7) - 0.5) * w * 0.8;
+    const px = -Math.sin(p.hd[i]), py = Math.cos(p.hd[i]);
+    ctx.beginPath();
+    ctx.ellipse(p.pts[i].x + px * ox, p.pts[i].y + py * ox, w * 0.26, w * 0.18, p.hd[i], 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (p.hasHead) drawFace(p);
+}
+
+function drawFace(p) {
+  const s = S;
+  // eyes: big, forward, with highlights
+  const ex = p.pts[1].x * 0.55 + p.pts[2].x * 0.45;
+  const ey = p.pts[1].y * 0.55 + p.pts[2].y * 0.45;
+  const eh = p.hd[1];
+  const epx = -Math.sin(eh), epy = Math.cos(eh);
+  const ew = halfWidth(1.5) * s;
+  const lookX = Math.cos(p.heading) * 2 * s, lookY = Math.sin(p.heading) * 2 * s;
+  for (const sd of [-1, 1]) {
+    const cxp = ex + epx * sd * ew * 0.58, cyp = ey + epy * sd * ew * 0.58;
+    ctx.fillStyle = EYE;
+    ctx.beginPath(); ctx.arc(cxp, cyp, 7 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = PUPIL;
+    ctx.beginPath(); ctx.arc(cxp + lookX, cyp + lookY, 3.2 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.arc(cxp - 2 * s + lookX * 0.4, cyp - 2.4 * s + lookY * 0.4, 1.8 * s, 0, Math.PI * 2); ctx.fill();
+    // blush
+    ctx.fillStyle = BLUSH;
+    ctx.beginPath();
+    ctx.ellipse(cxp + epx * sd * 6 * s, cyp + epy * sd * 6 * s + 3 * s, 3.4 * s, 2.4 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // smile
+  const hx = Math.cos(p.hd[0]), hy = Math.sin(p.hd[0]);
+  const sx = p.pts[0].x + hx * 5 * s, sy = p.pts[0].y + hy * 5 * s;
+  ctx.strokeStyle = 'rgba(240,235,210,0.5)';
+  ctx.lineWidth = 1.6 * s;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(sx, sy, 5.5 * s, p.hd[0] + 0.7, p.hd[0] + Math.PI - 0.7);
+  ctx.stroke();
+  // nostrils
+  const npx = -Math.sin(p.hd[0]), npy = Math.cos(p.hd[0]);
+  ctx.fillStyle = PUPIL;
+  for (const sd of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(p.pts[0].x + hx * 3 * s + npx * sd * 3.4 * s,
+            p.pts[0].y + hy * 3 * s + npy * sd * 3.4 * s, 1.2 * s, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
 function draw() {
   ctx.fillStyle = TEAL;
   ctx.fillRect(0, 0, W, H);
-  for (const s of segs) s.draw(showNums);
+  for (const p of parts) drawPart(p);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = `${13 * S}px system-ui, sans-serif`;
+  ctx.fillText('click the head or tail to chop it off', 14, H - 16);
 }
 
-function loop() { step(); draw(); requestAnimationFrame(loop); }
-loop();
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(3, (now - last) / 16.667);
+  last = now;
+  for (let i = parts.length - 1; i >= 0; i--) stepPart(parts[i], dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
 
-// split the body: radial impulse from the click point,
-// then re-deal the slots: nearest cell takes nearest slot.
-function split(x, y) {
-  for (const s of segs) {
-    let dx = s.x - x, dy = s.y - y;
-    let d = Math.hypot(dx, dy);
-    if (d < 1) { const a = rnd(0, Math.PI * 2); dx = Math.cos(a); dy = Math.sin(a); d = 1; }
-    const f = (5 + Math.random() * 5) * S * Math.max(0.35, 1 - d / (500 * S));
-    s.vx += (dx / d) * f;
-    s.vy += (dy / d) * f;
+// click: chop near head/tail, else startle the nearest part
+canvas.addEventListener('pointerdown', (e) => {
+  const x = e.clientX, y = e.clientY;
+  let best = null, bestD = 1e9, bestI = -1;
+  for (const p of parts) {
+    for (let i = 0; i < p.pts.length; i++) {
+      const d = Math.hypot(p.pts[i].x - x, p.pts[i].y - y);
+      if (d < bestD) { bestD = d; best = p; bestI = i; }
+    }
   }
-  assignSlots();
-}
-window.addEventListener('pointerdown', (e) => split(e.clientX, e.clientY));
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'n' || e.key === 'N') showNums = !showNums;
+  if (!best || bestD > 70 * S) return;
+  const n = best.pts.length;
+  const frac = bestI / (n - 1);
+  let cutAt = -1;
+  if (frac < 0.35 && best.hasHead && n > NECK_CUT + 4) cutAt = Math.min(NECK_CUT, n - 5);
+  else if (frac > 0.6 && best.hasTail && n > (n - WAIST_CUT) + 4) {
+    // waist cut in local coords: global WAIST_CUT mapped through g0
+    const gCut = WAIST_CUT;
+    if (gCut > best.g0 + 2 && gCut < best.g0 + n - 3) cutAt = gCut - best.g0;
+  }
+  if (cutAt > 0) { chop(best, cutAt); return; }
+  // startle
+  const a = Math.atan2(best.pts[0].y - y, best.pts[0].x - x);
+  best.heading = a;
+  const old = best.speed;
+  best.speed = 5;
+  setTimeout(() => { if (best.speed === 5) best.speed = old; }, 800);
 });
 
-// open scattered, like the video: one split at load so it re-forms on sight
-assignSlots();
-setTimeout(() => split(W / 2 + rnd(-60, 60), H / 2 + rnd(-60, 60)), 400);
+// debug hook for capture scripts
+window.SAL = {
+  parts,
+  headPos() {
+    const p = parts.find(q => q.hasHead) || parts[0];
+    return [p.pts[0].x, p.pts[0].y];
+  },
+  cutHead() {
+    const p = parts.find(q => q.kind === 'whole');
+    return p ? chop(p, NECK_CUT) : false;
+  },
+  cutTail() {
+    const p = parts.find(q => q.kind === 'whole');
+    return p ? chop(p, WAIST_CUT) : false;
+  }
+};
 </script>
 </body>
 </html>
