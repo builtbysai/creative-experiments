@@ -281,21 +281,9 @@ function stepPart(p, dt, waiting) {
     q.y = a.y + dy / d * seg;
   }
 
-  // lateral wave: trunk antiphase to tail, head counter-stabilized
+  // no lateral sway: the body stays still and trails the head's path,
+  // moving in the head's direction
   p.wavePhase += 0.085 * dt;
-  const amp = 3 * S * Math.min(1, moved / (S * dt + 0.001) * 0.35 + 0.15);
-  for (let i = 1; i < n; i++) {
-    const gi = i + p.g0;
-    let env;
-    if (gi < 3) env = 0.15;                       // head: nearly still (gaze)
-    else env = Math.sin(2 * Math.PI * (gi - 3) / (N - 4)); // trunk vs tail antiphase
-    const lat = amp * env * Math.sin(p.wavePhase);
-    const a = p.pts[Math.max(0, i - 1)], b = p.pts[Math.min(n - 1, i + 1)];
-    const dx = a.x - b.x, dy = a.y - b.y;
-    const d = Math.hypot(dx, dy) || 1;
-    p.pts[i].x += -dy / d * lat;
-    p.pts[i].y += dx / d * lat;
-  }
   refreshHeadings(p);
 
   // legs: tuck when scattered, step when walking
