@@ -138,7 +138,8 @@ const legs = [];
 [{ g: 6, side: -1, front: true }, { g: 6, side: 1, front: true },
  { g: 13, side: -1, front: false }, { g: 13, side: 1, front: false }].forEach((d, di) => {
   const leg = mkLeg(d.g, d.side, d.front);
-  leg.phaseOffset = [0.5, 0, 0.75, 0.25][di]; // LH -> LF -> RH -> RF
+  // research footfall sequence (touchdown phases): LH 0, LF 0.30, RH 0.50, RF 0.80
+  leg.phaseOffset = [0.30, 0.80, 0.00, 0.50][di];
   legs.push(leg);
 });
 function legAnchor(leg) {
@@ -222,29 +223,53 @@ function step(dt) {
   }
   refreshHeadings();
 
-  // legs
-  head.stridePhase = (head.stridePhase + moved / (48 * S)) % 1;
+  // legs: clock-driven lateral-sequence walk, duty factor 0.75.
+  // each foot touches down at its phase, stays planted 75% of the stride
+  // (world frame, body moves over it), swings 25%. Crouch peaks mid-stance,
+  // toes peel just after lift-off.
+  head.stridePhase = (head.stridePhase + moved / (64 * S)) % 1;
   const walking = moved > 0.004;
+  const DUTY = 0.75;
   for (const leg of legs) {
-    leg.cool = Math.max(0, leg.cool - dt);
     const an = legAnchor(leg);
-    if (leg.planted) {
-      const d = Math.hypot(leg.foot.x - an.x, leg.foot.y - an.y);
-      const reach = (leg.L1 + leg.L2) * S * 0.9;
-      const slot = (((head.stridePhase - leg.phaseOffset) % 1) + 1) % 1;
-      if (walking && d > reach * 0.94 && slot < 0.3 && leg.cool <= 0) {
+    const reach = (leg.L1 + leg.L2) * S * 0.9;
+    let cyc = (head.stridePhase - leg.phaseOffset) % 1;
+    if (cyc < 0) cyc += 1;
+    if (!walking) {
+      if (!leg.planted) {
+        leg.foot.x += (leg.to.x - leg.foot.x) * 0.2;
+        leg.foot.y += (leg.to.y - leg.foot.y) * 0.2;
+        if (Math.hypot(leg.to.x - leg.foot.x, leg.to.y - leg.foot.y) < 1) leg.planted = true;
+      }
+      leg.load = 0; leg.peel = 0;
+      continue;
+    }
+    if (cyc < DUTY) {
+      // stance
+      leg.planted = true;
+      // safety: never let a planted foot overstretch the leg
+      const dx = leg.foot.x - an.x, dy = leg.foot.y - an.y;
+      const d = Math.hypot(dx, dy);
+      if (d > reach && d > 0.01) {
+        leg.foot.x = an.x + dx / d * reach;
+        leg.foot.y = an.y + dy / d * reach;
+      }
+      leg.load = Math.sin(Math.PI * cyc / DUTY);
+      leg.peel = 0;
+    } else {
+      // swing
+      if (leg.planted) {
+        leg.planted = false;
         leg.from.x = leg.foot.x; leg.from.y = leg.foot.y;
         const t = footTarget(leg, an, 30);
         leg.to.x = t.x; leg.to.y = t.y;
-        leg.stepT = 0; leg.planted = false;
       }
-    } else {
-      leg.stepT += dt / 13;
-      const t = Math.min(1, leg.stepT);
-      const e = 1 - Math.pow(1 - t, 3);
+      const st = (cyc - DUTY) / (1 - DUTY);
+      const e = 1 - Math.pow(1 - st, 3);
       leg.foot.x = leg.from.x + (leg.to.x - leg.from.x) * e;
       leg.foot.y = leg.from.y + (leg.to.y - leg.from.y) * e;
-      if (t >= 1) { leg.planted = true; leg.cool = 9; }
+      leg.load = 0;
+      leg.peel = Math.max(0, 1 - st / 0.35);
     }
   }
 }
@@ -270,15 +295,27 @@ function drawLeg(leg) {
   const wx = leg.front ? -hx : hx, wy = leg.front ? -hy : hy;
   const bs = (px * wx + py * wy) >= 0 ? 1 : -1;
   const k = solveIK(a.x, a.y, leg.foot.x, leg.foot.y, leg.L1 * s, leg.L2 * s, bs);
+  // crouch: mid-stance the knee pushes outward as the leg loads
+  const load = leg.load || 0;
+  if (load > 0.01) {
+    const lx = k.kx - a.x, ly = k.ky - a.y;
+    const ld = Math.hypot(lx, ly) || 1;
+    // outward = away from the body, on the bend side
+    const ox = -ly / ld * bs, oy = lx / ld * bs;
+    k.kx += ox * load * 3.5 * s;
+    k.ky += oy * load * 3.5 * s;
+  }
   taperedSeg(a.x, a.y, k.kx, k.ky, 9 * s, 6 * s, MID);
   taperedSeg(k.kx, k.ky, leg.foot.x, leg.foot.y, 6 * s, 3.4 * s, MID);
   ctx.fillStyle = MID;
   ctx.beginPath(); ctx.arc(k.kx, k.ky, 3.4 * s, 0, Math.PI * 2); ctx.fill();
   const fa = Math.atan2(leg.foot.y - k.ky, leg.foot.x - k.kx);
   const spread = leg.planted ? 0.5 : 0.34;
+  // toe peel: just after lift-off the toes trail behind
+  const peelA = (leg.peel || 0) * 0.55 * (leg.front ? 1 : 1);
   ctx.lineCap = 'round';
   for (let ti = 0; ti < leg.toes; ti++) {
-    const ta = fa + (ti / (leg.toes - 1) - 0.5) * 2 * spread + spread * 0.9;
+    const ta = fa + (ti / (leg.toes - 1) - 0.5) * 2 * spread + spread * 0.9 - peelA;
     const len = (6.5 - Math.abs(ti - (leg.toes - 1) / 2) * 1.1) * s;
     taperedSeg(leg.foot.x, leg.foot.y,
                leg.foot.x + Math.cos(ta) * len, leg.foot.y + Math.sin(ta) * len,
