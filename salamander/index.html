@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Salamander · a procedural sketch</title>
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #02594c; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #f6efdd; }
   canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
 </style>
 </head>
@@ -14,35 +14,37 @@
 <script>
 'use strict';
 /*
- * Procedural salamander.
+ * Procedural salamander — chibi edition.
  *
- * A spine chain posed by follow-the-leader constraints, rendered as a
- * width-envelope silhouette (fire-salamander colors on the original
- * teal). Four sprawling legs with analytic 2-bone IK, feet planted in
- * the world frame, lateral-sequence walk gait. Standing lateral wave,
- * trunk antiphase to tail.
+ * Big round head, chubby body, short plump tail, stubby little legs
+ * with a gentle waddle. Soft pastel palette on a cream dotted
+ * background. The spine is a follow-the-leader chain rendered as a
+ * width-envelope silhouette; legs are 2-bone IK with world-planted
+ * feet.
  *
- * Chop it: click near the head and the head comes off — the torso
- * chases it and reconnects at the neck. Click near the tail and the
- * tail comes off — it swims back and reconnects at the waist.
+ * Chop it: click near the head and the head comes off — the body
+ * waddles after it and reconnects at the neck. Click near the tail
+ * and the tail comes off — it wiggles back to the waist.
  */
-const TEAL = '#02594c';
-const BODY = '#232a20';
-const BODY_EDGE = 'rgba(240,235,210,0.4)';
-const SPOT = '#e3c33f';
-const EYE = '#f4e3c0';
-const PUPIL = '#101310';
-const BLUSH = 'rgba(255,150,140,0.45)';
-const WOUND = '#4a3f35';
+const BG = '#f6efdd';
+const DOT = '#e9dcc0';
+const BODY = '#a6d8a8';      // soft leaf green
+const BODY_EDGE = '#6fae72';
+const BELLY = '#c9e8c5';
+const SPOT = '#8cc48f';
+const EYE_DARK = '#2f3a2f';
+const BLUSH = 'rgba(244,143,143,0.55)';
+const WOUND = '#d89a86';
 
-const N = 26;          // joints in the whole animal: 0 = snout, 25 = tail tip
-const NECK_CUT = 6;    // head part keeps joints 0..6 (forelegs live at 5)
-const WAIST_CUT = 12; // tail part keeps joints 12..25
-const SEG = 17;        // rest length between joints (px at S=1)
+const N = 16;          // joints: 0 = snout, 15 = tail tip
+const NECK_CUT = 5;    // head part keeps joints 0..5 (forelegs at 5)
+const WAIST_CUT = 10;  // tail part keeps joints 10..15
+const SEG = 15;
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 let W = 0, H = 0, S = 1, DPR = 1;
+let bgPattern = null;
 
 function resize() {
   DPR = Math.min(2, window.devicePixelRatio || 1);
@@ -51,16 +53,37 @@ function resize() {
   canvas.width = Math.round(W * DPR);
   canvas.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // cute dotted background, pre-rendered
+  bgPattern = document.createElement('canvas');
+  bgPattern.width = Math.max(2, Math.round(W * DPR));
+  bgPattern.height = Math.max(2, Math.round(H * DPR));
+  const b = bgPattern.getContext('2d');
+  b.setTransform(DPR, 0, 0, DPR, 0, 0);
+  b.fillStyle = BG;
+  b.fillRect(0, 0, W, H);
+  b.fillStyle = DOT;
+  const gap = 56 * S;
+  for (let y = gap / 2, r = 0; y < H + gap; y += gap, r++) {
+    for (let x = gap / 2 + (r % 2) * gap / 2; x < W + gap; x += gap) {
+      b.beginPath();
+      b.arc(x, y, 5 * S, 0, Math.PI * 2);
+      b.fill();
+    }
+  }
 }
 window.addEventListener('resize', resize);
 resize();
 
+// chibi half-width envelope (px at S=1): huge round head, chubby torso, nub tail
+// interpolated so fractional joints (eyes!) work
 function halfWidth(i) {
-  if (i <= 2) return 7 + i * 3.1;                        // round snout -> eyes
-  if (i <= 6) return 13.2 - (i - 2) * 1.05;              // head -> neck
-  if (i <= 11) return 11.5 + 3.5 * Math.sin(Math.PI * (i - 6) / 5); // chubby torso
-  if (i === 12) return 8.5;
-  return 8.5 * Math.pow(0.82, i - 12);                  // tail taper
+  const prof = [12, 17, 20, 20, 18, 11,   // big round head 0..5, pinched neck
+                14, 15, 15, 14, 12,       // chubby torso 6..10
+                9, 7, 5.5, 4, 2.5];       // short nub tail 11..15
+  const lo = Math.max(0, Math.min(prof.length - 1, Math.floor(i)));
+  const hi = Math.max(0, Math.min(prof.length - 1, Math.ceil(i)));
+  const t = Math.max(0, Math.min(1, i - Math.floor(i)));
+  return prof[lo] * (1 - t) + prof[hi] * t;
 }
 function hash(n) { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); }
 function noise1(t) {
@@ -79,14 +102,12 @@ function solveIK(hx, hy, fx, fy, a, b, bendSign) {
 }
 
 // ---------------- parts ----------------
-// A part is a contiguous run of joints with its own motion state.
-// part = { pts, hd, legs, hasHead, hasTail, g0, leader, ... }
 const parts = [];
 
 function mkLeg(joint, side, front) {
   return {
     joint, side, front, phaseOffset: 0,
-    L1: 34, L2: 30,
+    L1: 14, L2: 12,                       // stubby nub reach
     foot: { x: 0, y: 0 }, planted: true, stepT: 0,
     from: { x: 0, y: 0 }, to: { x: 0, y: 0 }, cool: 0
   };
@@ -98,18 +119,17 @@ function makePart(pts, hasHead, hasTail, g0) {
     hd: pts.map(() => 0),
     legs: [], hasHead, hasTail, g0,
     leader: null, attachR: 0, sepT: 0,
-    hx: pts[0].x, hy: pts[0].y, heading: -Math.PI / 2,
+    heading: -Math.PI / 2,
     wanderT: Math.random() * 100,
-    speed: 1.7, stridePhase: Math.random(), wavePhase: Math.random() * 6,
+    speed: 1.15, stridePhase: Math.random(), wavePhase: Math.random() * 6,
     kind: 'mid'
   };
   p.kind = hasHead && hasTail ? 'whole' : hasHead ? 'head' : hasTail ? 'tail' : 'mid';
-  // legs whose global joint falls inside this part
   const legDefs = [
     { g: 5, side: -1, front: true }, { g: 5, side: 1, front: true },
-    { g: 10, side: -1, front: false }, { g: 10, side: 1, front: false },
+    { g: 9, side: -1, front: false }, { g: 9, side: 1, front: false },
   ];
-  const order = [2, 0, 3, 1]; // LH -> LF -> RH -> RF lateral sequence
+  const order = [2, 0, 3, 1];
   legDefs.forEach((d, di) => {
     if (d.g >= g0 && d.g < g0 + pts.length) {
       const leg = mkLeg(d.g - g0, d.side, d.front);
@@ -118,13 +138,10 @@ function makePart(pts, hasHead, hasTail, g0) {
     }
   });
   refreshHeadings(p);
-  // plant feet near their anchors
   for (const leg of p.legs) {
     const a = legAnchor(p, leg);
-    const h = p.hd[leg.joint];
-    const px = -Math.sin(h) * leg.side, py = Math.cos(h) * leg.side;
-    leg.foot.x = a.x + px * 40 * S + Math.cos(h) * (leg.front ? 12 : -8) * S;
-    leg.foot.y = a.y + py * 40 * S + Math.sin(h) * (leg.front ? 12 : -8) * S;
+    const t = footTarget(p, leg, a, 13);
+    leg.foot.x = t.x; leg.foot.y = t.y;
   }
   return p;
 }
@@ -140,11 +157,10 @@ function refreshHeadings(p) {
 function legAnchor(p, leg) {
   const j = p.pts[leg.joint];
   const px = -Math.sin(p.hd[leg.joint]), py = Math.cos(p.hd[leg.joint]);
-  return { x: j.x + px * leg.side * halfWidth(leg.joint + p.g0) * S * 0.9,
-           y: j.y + py * leg.side * halfWidth(leg.joint + p.g0) * S * 0.9 };
+  return { x: j.x + px * leg.side * halfWidth(leg.joint + p.g0) * S * 0.95,
+           y: j.y + py * leg.side * halfWidth(leg.joint + p.g0) * S * 0.95 };
 }
 
-// the whole animal at load
 (function init() {
   const cx = W / 2, cy = H / 2, h0 = -Math.PI / 2;
   const pts = [];
@@ -152,23 +168,21 @@ function legAnchor(p, leg) {
     pts.push({ x: cx - Math.cos(h0) * SEG * S * i, y: cy - Math.sin(h0) * SEG * S * i });
   }
   const p = makePart(pts, true, true, 0);
-  p.hx = cx; p.hy = cy; p.heading = h0;
+  p.heading = h0;
   parts.push(p);
 })();
 
 function chop(part, localCut) {
-  // split part into front (0..localCut) and back (localCut..end)
   const n = part.pts.length;
   if (localCut < 3 || localCut > n - 4) return false;
   const front = makePart(part.pts.slice(0, localCut + 1), part.hasHead, false, part.g0);
   const back = makePart(part.pts.slice(localCut), false, part.hasTail, part.g0 + localCut);
-  front.hx = part.hx; front.hy = part.hy; front.heading = part.heading;
+  front.heading = part.heading;
   front.wanderT = part.wanderT; front.speed = part.speed;
   front.leader = part.leader;
   back.leader = front;
-  back.sepT = 90; // fly apart before the chase, so the cut reads
-  back.speed = 2.7;
-  // the rest of the chain now follows the new back part
+  back.sepT = 80;
+  back.speed = 2.1;
   for (const q of parts) if (q.leader === part) q.leader = back;
   parts.splice(parts.indexOf(part), 1, front, back);
   return true;
@@ -176,7 +190,6 @@ function chop(part, localCut) {
 
 function mergeParts(lead, fol) {
   const base = lead.pts.length;
-  // snap the junction, then concatenate
   fol.pts[0].x = lead.pts[base - 1].x;
   fol.pts[0].y = lead.pts[base - 1].y;
   lead.pts = lead.pts.concat(fol.pts.slice(1));
@@ -184,7 +197,7 @@ function mergeParts(lead, fol) {
   for (const leg of fol.legs) { leg.joint += base - 1; lead.legs.push(leg); }
   lead.hasTail = fol.hasTail;
   lead.kind = lead.hasHead && lead.hasTail ? 'whole' : lead.hasHead ? 'head' : lead.hasTail ? 'tail' : 'mid';
-  lead.speed = 1.7;
+  lead.speed = 1.15;
   for (const q of parts) if (q.leader === fol) q.leader = lead;
   parts.splice(parts.indexOf(fol), 1);
 }
@@ -197,65 +210,70 @@ function steerHead(p, tx, ty, dt, maxSp) {
   let dh = want - p.heading;
   while (dh > Math.PI) dh -= Math.PI * 2;
   while (dh < -Math.PI) dh += Math.PI * 2;
-  p.heading += Math.max(-0.12 * dt, Math.min(0.12 * dt, dh * 0.2 * dt));
+  p.heading += Math.max(-0.1 * dt, Math.min(0.1 * dt, dh * 0.18 * dt));
   const sp = Math.min(maxSp, d * 0.08) * S * dt;
   p.pts[0].x += Math.cos(p.heading) * sp;
   p.pts[0].y += Math.sin(p.heading) * sp;
   return sp;
 }
 
+function pickTarget(p) {
+  const m = 0.2;
+  p.tx = W * (m + Math.random() * (1 - 2 * m));
+  p.ty = H * (m + Math.random() * (1 - 2 * m));
+  p.targetAge = 0;
+}
+
 function wanderHead(p, dt) {
-  p.wanderT += 0.005 * dt;
-  const wa = noise1(p.wanderT) * 0.5;
-  const cx = W / 2, cy = H / 2;
-  const dc = Math.hypot(p.pts[0].x - cx, p.pts[0].y - cy);
-  const edge = Math.min(W, H) * 0.38;
-  let steerA = 0;
-  if (dc > edge) {
-    const toC = Math.atan2(cy - p.pts[0].y, cx - p.pts[0].x);
-    let d = toC - p.heading;
-    while (d > Math.PI) d -= Math.PI * 2;
-    while (d < -Math.PI) d += Math.PI * 2;
-    steerA = d * 0.06 * dt;
-  }
-  p.heading += wa * 0.028 * dt + steerA;
+  // walk in straight lines between picked targets — no circling
+  if (p.tx === undefined) pickTarget(p);
+  p.targetAge += dt;
+  const dx = p.tx - p.pts[0].x, dy = p.ty - p.pts[0].y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 70 * S || p.targetAge > 700) pickTarget(p);
+  const want = Math.atan2(dy, dx);
+  let dh = want - p.heading;
+  while (dh > Math.PI) dh -= Math.PI * 2;
+  while (dh < -Math.PI) dh += Math.PI * 2;
+  p.heading += Math.max(-0.045 * dt, Math.min(0.045 * dt, dh * 0.12 * dt));
   const sp = p.speed * S * dt;
   p.pts[0].x += Math.cos(p.heading) * sp;
   p.pts[0].y += Math.sin(p.heading) * sp;
   return sp;
 }
 
-function stepPart(p, dt) {
+function stepPart(p, dt, waiting) {
   let moved = 0;
   if (!p.leader) {
+    // when a part is missing, the front waits so the other can catch up
+    const saved = p.speed;
+    if (waiting) p.speed = 0.35;
     moved = wanderHead(p, dt);
+    p.speed = saved;
   } else {
     const stump = p.leader.pts[p.leader.pts.length - 1];
     if (p.sepT > 0) {
-      // fresh chop: fly apart so the cut reads, then the chase begins
       p.sepT -= dt;
       const a = Math.atan2(p.pts[0].y - stump.y, p.pts[0].x - stump.x);
-      p.pts[0].x += Math.cos(a) * 2.2 * S * dt;
-      p.pts[0].y += Math.sin(a) * 2.2 * S * dt;
-      moved = 2.2 * S * dt;
+      p.pts[0].x += Math.cos(a) * 1.8 * S * dt;
+      p.pts[0].y += Math.sin(a) * 1.8 * S * dt;
+      moved = 1.8 * S * dt;
     } else {
       moved = steerHead(p, stump.x, stump.y, dt, p.speed);
     }
-    // rejoin: chase, then dock and snap on
     const d = Math.hypot(p.pts[0].x - stump.x, p.pts[0].y - stump.y);
     if (p.sepT <= 0) {
-      if (d < 34 * S) {
+      if (d < 30 * S) {
         p.pts[0].x += (stump.x - p.pts[0].x) * 0.25;
         p.pts[0].y += (stump.y - p.pts[0].y) * 0.25;
-        if (d < 15 * S && ++p.attachR > 8) { mergeParts(p.leader, p); return; }
+        if (d < 14 * S && ++p.attachR > 8) { mergeParts(p.leader, p); return; }
       } else p.attachR = 0;
     }
   }
 
-  p.stridePhase = (p.stridePhase + moved / (52 * S)) % 1;
-  p.wavePhase += 0.11 * dt;
+  p.stridePhase = (p.stridePhase + moved / (44 * S)) % 1;
+  p.wavePhase += 0.09 * dt;
 
-  // follow-the-leader chain
   const seg = SEG * S, n = p.pts.length;
   for (let i = 1; i < n; i++) {
     const a = p.pts[i - 1], q = p.pts[i];
@@ -265,16 +283,15 @@ function stepPart(p, dt) {
     q.y = a.y + dy / d * seg;
   }
 
-  // lateral wave: standing (trunk antiphase to tail) for walkers,
-  // traveling for the detached swimming tail
-  const amp = (p.kind === 'tail' ? 7 : 5) * S * Math.min(1, moved / (1.2 * S * dt + 0.001) * 0.5 + 0.25);
+  // gentle sway: small standing wave, tail wiggles with a lag
+  const amp = 2.4 * S * Math.min(1, moved / (S * dt + 0.001) * 0.4 + 0.2);
   for (let i = 1; i < n; i++) {
     let lat;
     if (p.kind === 'tail') {
       const u = i / (n - 1);
-      lat = amp * u * Math.sin(p.wavePhase * 1.6 - i * 0.55);
+      lat = amp * 1.6 * u * Math.sin(p.wavePhase * 1.5 - i * 0.5);
     } else {
-      const env = i < 3 ? 0 : Math.sin(2 * Math.PI * (i - 3) / Math.max(4, n - 4));
+      const env = i < 2 ? 0 : Math.sin(Math.PI * Math.min(1, (i - 2) / Math.max(3, n - 3)));
       lat = amp * env * Math.sin(p.wavePhase);
     }
     const a = p.pts[Math.max(0, i - 1)], b = p.pts[Math.min(n - 1, i + 1)];
@@ -285,58 +302,63 @@ function stepPart(p, dt) {
   }
   refreshHeadings(p);
 
-  // legs
   for (const leg of p.legs) {
     leg.cool = Math.max(0, leg.cool - dt);
     const an = legAnchor(p, leg);
     if (leg.planted) {
       const d = Math.hypot(leg.foot.x - an.x, leg.foot.y - an.y);
-      const reach = (leg.L1 + leg.L2) * S * 0.92;
+      const reach = (leg.L1 + leg.L2) * S * 0.9;
       const slot = (((p.stridePhase - leg.phaseOffset) % 1) + 1) % 1;
-      if (d > reach * 0.98 && slot < 0.3 && leg.cool <= 0 && moved > 0.01) {
-        const h = p.hd[leg.joint];
-        const px = -Math.sin(h) * leg.side, py = Math.cos(h) * leg.side;
+      if (d > reach * 0.96 && slot < 0.3 && leg.cool <= 0 && moved > 0.005) {
         leg.from.x = leg.foot.x; leg.from.y = leg.foot.y;
-        leg.to.x = an.x + px * 46 * S + Math.cos(h) * (leg.front ? 16 : -10) * S;
-        leg.to.y = an.y + py * 46 * S + Math.sin(h) * (leg.front ? 16 : -10) * S;
+        const t = footTarget(p, leg, an, 15);
+        leg.to.x = t.x; leg.to.y = t.y;
         leg.stepT = 0; leg.planted = false;
       }
     } else {
-      leg.stepT += dt / 14;
+      leg.stepT += dt / 12;
       const t = Math.min(1, leg.stepT);
       const e = t * t * (3 - 2 * t);
       leg.foot.x = leg.from.x + (leg.to.x - leg.from.x) * e;
       leg.foot.y = leg.from.y + (leg.to.y - leg.from.y) * e;
-      if (t >= 1) { leg.planted = true; leg.cool = 10; }
+      if (t >= 1) { leg.planted = true; leg.cool = 8; }
     }
   }
 }
 
 // ---------------- drawing ----------------
 function drawLeg(p, leg) {
+  // stubby nub leg angled back toward the body — one thick rounded limb
   const a = legAnchor(p, leg);
   const s = S;
-  const h = p.hd[leg.joint];
-  const px = -Math.sin(h) * leg.side, py = Math.cos(h) * leg.side;
-  const hx = Math.cos(h), hy = Math.sin(h);
-  const wx = leg.front ? -hx : hx, wy = leg.front ? -hy : hy;
-  const bs = (px * wx + py * wy) >= 0 ? 1 : -1;
-  const k = solveIK(a.x, a.y, leg.foot.x, leg.foot.y, leg.L1 * s, leg.L2 * s, bs);
-  ctx.strokeStyle = BODY;
+  ctx.strokeStyle = BODY_EDGE;
   ctx.lineCap = 'round';
-  ctx.lineWidth = 7 * s;
-  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(k.kx, k.ky); ctx.stroke();
-  ctx.lineWidth = 5 * s;
-  ctx.beginPath(); ctx.moveTo(k.kx, k.ky); ctx.lineTo(leg.foot.x, leg.foot.y); ctx.stroke();
+  ctx.lineWidth = 7.5 * s;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(leg.foot.x, leg.foot.y); ctx.stroke();
+  ctx.fillStyle = BODY_EDGE;
+  ctx.beginPath(); ctx.arc(leg.foot.x, leg.foot.y, 4 * s, 0, Math.PI * 2); ctx.fill();
+  // tiny toes
+  const fa = Math.atan2(leg.foot.y - a.y, leg.foot.x - a.x);
   ctx.lineWidth = 2.2 * s;
-  const fa = Math.atan2(leg.foot.y - k.ky, leg.foot.x - k.kx);
   for (let tI = -1; tI <= 1; tI++) {
     const ta = fa + tI * 0.5;
     ctx.beginPath();
     ctx.moveTo(leg.foot.x, leg.foot.y);
-    ctx.lineTo(leg.foot.x + Math.cos(ta) * 9 * s, leg.foot.y + Math.sin(ta) * 9 * s);
+    ctx.lineTo(leg.foot.x + Math.cos(ta) * 5.5 * s, leg.foot.y + Math.sin(ta) * 5.5 * s);
     ctx.stroke();
   }
+}
+
+// foot rest/step targets: outward, swept toward the tail (front legs)
+// or toward the head (hind legs) so the nubs hug the body
+function footTarget(p, leg, an, dist) {
+  const h = p.hd[leg.joint];
+  const ox = -Math.sin(h) * leg.side, oy = Math.cos(h) * leg.side;
+  const fx = Math.cos(h), fy = Math.sin(h);
+  const k = leg.front ? -0.8 : 0.8;
+  let dx = ox + fx * k, dy = oy + fy * k;
+  const d = Math.hypot(dx, dy) || 1;
+  return { x: an.x + dx / d * dist * S, y: an.y + dy / d * dist * S };
 }
 
 function drawPart(p) {
@@ -358,30 +380,41 @@ function drawPart(p) {
   ctx.fillStyle = BODY;
   ctx.fill();
   ctx.strokeStyle = BODY_EDGE;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2.5 * S;
+  ctx.lineJoin = 'round';
   ctx.stroke();
 
-  // wound caps where it was chopped
-  ctx.fillStyle = WOUND;
+  // soft belly shading along the underside
+  ctx.strokeStyle = BELLY;
+  ctx.lineWidth = 3 * S;
+  ctx.beginPath();
+  for (let i = 1; i < n - 1; i++) {
+    const px = -Math.sin(p.hd[i]), py = Math.cos(p.hd[i]);
+    const w = halfWidth(i + p.g0) * S * 0.55;
+    const bx = p.pts[i].x - px * w * 0.4, by = p.pts[i].y - py * w * 0.4;
+    if (i === 1) ctx.moveTo(bx, by); else ctx.lineTo(bx, by);
+  }
+  ctx.stroke();
+
+  // wound caps (small, deep)
+  ctx.fillStyle = '#b97f6a';
   if (!p.hasHead) {
-    const w = halfWidth(p.g0) * S;
-    ctx.beginPath(); ctx.arc(p.pts[0].x, p.pts[0].y, w * 0.9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(p.pts[0].x, p.pts[0].y, halfWidth(p.g0) * S * 0.55, 0, Math.PI * 2); ctx.fill();
   }
   if (!p.hasTail) {
-    const w = halfWidth(p.g0 + n - 1) * S;
-    ctx.beginPath(); ctx.arc(p.pts[n - 1].x, p.pts[n - 1].y, w * 0.9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(p.pts[n - 1].x, p.pts[n - 1].y, halfWidth(p.g0 + n - 1) * S * 0.55, 0, Math.PI * 2); ctx.fill();
   }
 
-  // dorsal spots
+  // soft spots
   ctx.fillStyle = SPOT;
-  for (let i = 2; i < n - 1; i += 2) {
+  for (let i = 4; i < n - 1; i += 2) {
     const gi = i + p.g0;
-    if (gi > 20) break;
+    if (gi > 13) break;
     const w = halfWidth(gi) * S;
-    const ox = (hash(gi * 3.7) - 0.5) * w * 0.8;
+    const ox = (hash(gi * 3.7) - 0.5) * w * 0.7;
     const px = -Math.sin(p.hd[i]), py = Math.cos(p.hd[i]);
     ctx.beginPath();
-    ctx.ellipse(p.pts[i].x + px * ox, p.pts[i].y + py * ox, w * 0.26, w * 0.18, p.hd[i], 0, Math.PI * 2);
+    ctx.ellipse(p.pts[i].x + px * ox, p.pts[i].y + py * ox, w * 0.24, w * 0.17, p.hd[i], 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -390,52 +423,39 @@ function drawPart(p) {
 
 function drawFace(p) {
   const s = S;
-  // eyes: big, forward, with highlights
-  const ex = p.pts[1].x * 0.55 + p.pts[2].x * 0.45;
-  const ey = p.pts[1].y * 0.55 + p.pts[2].y * 0.45;
+  // big forward chibi eyes
+  const ex = p.pts[1].x * 0.5 + p.pts[2].x * 0.5;
+  const ey = p.pts[1].y * 0.5 + p.pts[2].y * 0.5;
   const eh = p.hd[1];
   const epx = -Math.sin(eh), epy = Math.cos(eh);
   const ew = halfWidth(1.5) * s;
-  const lookX = Math.cos(p.heading) * 2 * s, lookY = Math.sin(p.heading) * 2 * s;
+  const lookX = Math.cos(p.heading) * 1.6 * s, lookY = Math.sin(p.heading) * 1.6 * s;
   for (const sd of [-1, 1]) {
-    const cxp = ex + epx * sd * ew * 0.58, cyp = ey + epy * sd * ew * 0.58;
-    ctx.fillStyle = EYE;
-    ctx.beginPath(); ctx.arc(cxp, cyp, 7 * s, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = PUPIL;
-    ctx.beginPath(); ctx.arc(cxp + lookX, cyp + lookY, 3.2 * s, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.beginPath(); ctx.arc(cxp - 2 * s + lookX * 0.4, cyp - 2.4 * s + lookY * 0.4, 1.8 * s, 0, Math.PI * 2); ctx.fill();
-    // blush
+    const cxp = ex + epx * sd * ew * 0.42, cyp = ey + epy * sd * ew * 0.42;
+    ctx.fillStyle = EYE_DARK;
+    ctx.beginPath(); ctx.arc(cxp, cyp, 8 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(cxp - 2.4 * s + lookX * 0.3, cyp - 2.8 * s + lookY * 0.3, 2.8 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cxp + 2.2 * s, cyp + 2.4 * s, 1.2 * s, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = BLUSH;
     ctx.beginPath();
-    ctx.ellipse(cxp + epx * sd * 6 * s, cyp + epy * sd * 6 * s + 3 * s, 3.4 * s, 2.4 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(cxp + epx * sd * 9 * s, cyp + epy * sd * 9 * s + 5 * s, 5 * s, 3.6 * s, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   // smile
   const hx = Math.cos(p.hd[0]), hy = Math.sin(p.hd[0]);
-  const sx = p.pts[0].x + hx * 5 * s, sy = p.pts[0].y + hy * 5 * s;
-  ctx.strokeStyle = 'rgba(240,235,210,0.5)';
-  ctx.lineWidth = 1.6 * s;
+  ctx.strokeStyle = 'rgba(70,100,70,0.65)';
+  ctx.lineWidth = 2.2 * s;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.arc(sx, sy, 5.5 * s, p.hd[0] + 0.7, p.hd[0] + Math.PI - 0.7);
+  ctx.arc(p.pts[0].x + hx * 5 * s, p.pts[0].y + hy * 5 * s, 7 * s, p.hd[0] + 0.6, p.hd[0] + Math.PI - 0.6);
   ctx.stroke();
-  // nostrils
-  const npx = -Math.sin(p.hd[0]), npy = Math.cos(p.hd[0]);
-  ctx.fillStyle = PUPIL;
-  for (const sd of [-1, 1]) {
-    ctx.beginPath();
-    ctx.arc(p.pts[0].x + hx * 3 * s + npx * sd * 3.4 * s,
-            p.pts[0].y + hy * 3 * s + npy * sd * 3.4 * s, 1.2 * s, 0, Math.PI * 2);
-    ctx.fill();
-  }
 }
 
 function draw() {
-  ctx.fillStyle = TEAL;
-  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(bgPattern, 0, 0, W, H);
   for (const p of parts) drawPart(p);
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillStyle = 'rgba(90,110,85,0.8)';
   ctx.font = `${13 * S}px system-ui, sans-serif`;
   ctx.fillText('click the head or tail to chop it off', 14, H - 16);
 }
@@ -444,13 +464,13 @@ let last = performance.now();
 function loop(now) {
   const dt = Math.min(3, (now - last) / 16.667);
   last = now;
-  for (let i = parts.length - 1; i >= 0; i--) stepPart(parts[i], dt);
+  const waiting = parts.length > 1;
+  for (let i = parts.length - 1; i >= 0; i--) stepPart(parts[i], dt, waiting);
   draw();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
-// click: chop near head/tail, else startle the nearest part
 canvas.addEventListener('pointerdown', (e) => {
   const x = e.clientX, y = e.clientY;
   let best = null, bestD = 1e9, bestI = -1;
@@ -465,21 +485,18 @@ canvas.addEventListener('pointerdown', (e) => {
   const frac = bestI / (n - 1);
   let cutAt = -1;
   if (frac < 0.35 && best.hasHead && n > NECK_CUT + 4) cutAt = Math.min(NECK_CUT, n - 5);
-  else if (frac > 0.6 && best.hasTail && n > (n - WAIST_CUT) + 4) {
-    // waist cut in local coords: global WAIST_CUT mapped through g0
+  else if (frac > 0.6 && best.hasTail) {
     const gCut = WAIST_CUT;
     if (gCut > best.g0 + 2 && gCut < best.g0 + n - 3) cutAt = gCut - best.g0;
   }
   if (cutAt > 0) { chop(best, cutAt); return; }
-  // startle
   const a = Math.atan2(best.pts[0].y - y, best.pts[0].x - x);
   best.heading = a;
   const old = best.speed;
-  best.speed = 5;
-  setTimeout(() => { if (best.speed === 5) best.speed = old; }, 800);
+  best.speed = 4;
+  setTimeout(() => { if (best.speed === 4) best.speed = old; }, 800);
 });
 
-// debug hook for capture scripts
 window.SAL = {
   parts,
   headPos() {
