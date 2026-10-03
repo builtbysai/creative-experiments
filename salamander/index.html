@@ -129,10 +129,10 @@ for (let k = 0; k < 40; k++) {
 
 // legs
 function mkLeg(joint, side, front) {
-  return { joint, side, front, phaseOffset: 0, L1: 26, L2: 22,
-           foot: { x: 0, y: 0 }, planted: true, stepT: 0,
-           from: { x: 0, y: 0 }, to: { x: 0, y: 0 }, cool: 0,
-           toes: front ? 4 : 5 };
+  return { joint, side, front, phaseOffset: 0, L1: 14, L2: 12,
+           foot: { x: 0, y: 0 }, planted: true,
+           from: { x: 0, y: 0 }, to: { x: 0, y: 0 },
+           toes: front ? 4 : 5, load: 0, peel: 0 };
 }
 const legs = [];
 [{ g: 6, side: -1, front: true }, { g: 6, side: 1, front: true },
@@ -145,8 +145,9 @@ const legs = [];
 function legAnchor(leg) {
   const j = pts[leg.joint];
   const px = -Math.sin(hd[leg.joint]), py = Math.cos(hd[leg.joint]);
-  return { x: j.x + px * leg.side * halfWidth(leg.joint) * S * 0.9,
-           y: j.y + py * leg.side * halfWidth(leg.joint) * S * 0.9 };
+  // hip just inside the body edge; the fleshy limb shows outside it
+  return { x: j.x + px * leg.side * halfWidth(leg.joint) * S * 0.75,
+           y: j.y + py * leg.side * halfWidth(leg.joint) * S * 0.75 };
 }
 function footTarget(leg, an, dist) {
   const h = hd[leg.joint];
@@ -158,7 +159,7 @@ function footTarget(leg, an, dist) {
   return { x: an.x + dx / d * dist * S, y: an.y + dy / d * dist * S };
 }
 for (const leg of legs) {
-  const t = footTarget(leg, legAnchor(leg), 26);
+  const t = footTarget(leg, legAnchor(leg), 20);
   leg.foot.x = t.x; leg.foot.y = t.y;
 }
 
@@ -261,7 +262,7 @@ function step(dt) {
       if (leg.planted) {
         leg.planted = false;
         leg.from.x = leg.foot.x; leg.from.y = leg.foot.y;
-        const t = footTarget(leg, an, 30);
+        const t = footTarget(leg, an, 23);
         leg.to.x = t.x; leg.to.y = t.y;
       }
       const st = (cyc - DUTY) / (1 - DUTY);
@@ -300,26 +301,32 @@ function drawLeg(leg) {
   if (load > 0.01) {
     const lx = k.kx - a.x, ly = k.ky - a.y;
     const ld = Math.hypot(lx, ly) || 1;
-    // outward = away from the body, on the bend side
     const ox = -ly / ld * bs, oy = lx / ld * bs;
-    k.kx += ox * load * 3.5 * s;
-    k.ky += oy * load * 3.5 * s;
+    k.kx += ox * load * 2.5 * s;
+    k.ky += oy * load * 2.5 * s;
   }
-  taperedSeg(a.x, a.y, k.kx, k.ky, 9 * s, 6 * s, MID);
-  taperedSeg(k.kx, k.ky, leg.foot.x, leg.foot.y, 6 * s, 3.4 * s, MID);
+  // short, thick, fleshy limb
+  taperedSeg(a.x, a.y, k.kx, k.ky, 10 * s, 7.5 * s, MID);
+  taperedSeg(k.kx, k.ky, leg.foot.x, leg.foot.y, 7.5 * s, 5 * s, MID);
   ctx.fillStyle = MID;
-  ctx.beginPath(); ctx.arc(k.kx, k.ky, 3.4 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(k.kx, k.ky, 4 * s, 0, Math.PI * 2); ctx.fill();
+  // flat fanned foot: palm blob + stubby toe bumps
   const fa = Math.atan2(leg.foot.y - k.ky, leg.foot.x - k.kx);
-  const spread = leg.planted ? 0.5 : 0.34;
-  // toe peel: just after lift-off the toes trail behind
-  const peelA = (leg.peel || 0) * 0.55 * (leg.front ? 1 : 1);
+  const peelA = (leg.peel || 0) * 0.5;
+  const fwdX = Math.cos(fa - peelA), fwdY = Math.sin(fa - peelA);
+  ctx.fillStyle = MID;
+  ctx.beginPath();
+  ctx.arc(leg.foot.x + fwdX * 2 * s, leg.foot.y + fwdY * 2 * s, 4.2 * s, 0, Math.PI * 2);
+  ctx.fill();
+  const spread = leg.planted ? 0.62 : 0.4; // wide fan on plant
   ctx.lineCap = 'round';
   for (let ti = 0; ti < leg.toes; ti++) {
-    const ta = fa + (ti / (leg.toes - 1) - 0.5) * 2 * spread + spread * 0.9 - peelA;
-    const len = (6.5 - Math.abs(ti - (leg.toes - 1) / 2) * 1.1) * s;
-    taperedSeg(leg.foot.x, leg.foot.y,
-               leg.foot.x + Math.cos(ta) * len, leg.foot.y + Math.sin(ta) * len,
-               2.2 * s, 1 * s, DORSAL);
+    const ta = fa - peelA + (ti / (leg.toes - 1) - 0.5) * 2 * spread + spread * 0.85;
+    const len = (7 - Math.abs(ti - (leg.toes - 1) / 2) * 1.2) * s;
+    taperedSeg(leg.foot.x + fwdX * 3 * s, leg.foot.y + fwdY * 3 * s,
+               leg.foot.x + fwdX * 3 * s + Math.cos(ta) * len,
+               leg.foot.y + fwdY * 3 * s + Math.sin(ta) * len,
+               3 * s, 1.6 * s, MID);
   }
 }
 
