@@ -6,7 +6,7 @@
 <title>Salamander · a procedural sketch</title>
 <style>
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #042e27; }
-  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: crosshair; }
 </style>
 </head>
 <body>
@@ -14,28 +14,19 @@
 <script>
 'use strict';
 /*
- * Procedural salamander — jewel edition.
+ * Procedural salamander.
  *
- * An elegant naturalistic salamander on a deep teal pond. The body is
- * a spine chain rendered as layered countershaded silhouettes (dark
- * dorsal -> light edge), gold marbling in body space, and a soft rim
- * glow. Legs are tapered segments with proper toes (4 front / 5 hind),
- * feet planted in the world frame, asymmetric step cycle.
- *
- * Click: the body shatters into 6 parts. Each part tumbles, then seeks
- * its station behind the part ahead and docks — the animal reassembles
- * itself in order.
+ * The head follows your mouse / touch. The body trails behind it on a
+ * spine chain, still, no sway. Tapered legs with proper toes step as it
+ * walks, feet planted in the world frame.
  */
 const N = 24;
-const CUTS = [0, 4, 8, 12, 16, 20, 24]; // 6 parts
 const SEG = 16;
 
-// palette: jewel pond
 const BG_TOP = '#0a6b5c', BG_BOT = '#022a23';
-const EDGE = '#7fa05c';      // light moss edge
-const MID = '#4c6e44';       // mid moss
-const DORSAL = '#2c4a2e';    // dark dorsal
-const GOLD = 'rgba(224,179,78,0.20)';
+const EDGE = '#7fa05c';
+const MID = '#4c6e44';
+const DORSAL = '#2c4a2e';
 const RIM = 'rgba(255,244,200,0.28)';
 const IRIS_A = '#f0b43e', IRIS_B = '#7a4d15';
 
@@ -95,12 +86,10 @@ function taperedSeg(x1, y1, x2, y2, w1, w2, color) {
   ctx.lineTo(x1 - px * w1 / 2, y1 - py * w1 / 2);
   ctx.closePath(); ctx.fill();
 }
-// smooth closed path through points (midpoint quadratics)
 function smoothLoop(pts) {
   const n = pts.length;
   ctx.beginPath();
-  let mx = (pts[0][0] + pts[1][0]) / 2, my = (pts[0][1] + pts[1][1]) / 2;
-  ctx.moveTo(mx, my);
+  ctx.moveTo((pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2);
   for (let i = 1; i <= n; i++) {
     const p = pts[i % n], q = pts[(i + 1) % n];
     ctx.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
@@ -108,67 +97,58 @@ function smoothLoop(pts) {
   ctx.closePath();
 }
 
-// ---------------- parts ----------------
-const parts = [];
+// ---------------- the animal ----------------
+const pts = [];
+const hd = new Array(N).fill(0);
+const head = {
+  x: W / 2, y: H / 2, heading: -Math.PI / 2,
+  tx: W / 2, ty: H / 2,           // pointer target
+  speed: 2.2, stridePhase: 0,
+  idleT: 0,                       // time since last pointer move
+  pauseT: 0, lookT: 0
+};
+for (let i = 0; i < N; i++) {
+  pts.push({ x: head.x - Math.cos(head.heading) * SEG * S * i,
+             y: head.y - Math.sin(head.heading) * SEG * S * i });
+}
+
+function refreshHeadings() {
+  for (let i = 0; i < N; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(N - 1, i + 1)];
+    hd[i] = Math.atan2(a.y - b.y, a.x - b.x);
+  }
+}
+refreshHeadings();
+
+// gold marbling blotches in body space
+const blotches = [];
+for (let k = 0; k < 40; k++) {
+  blotches.push({ u: hash(k * 7.3) * (N - 1), v: (hash(k * 3.1) - 0.5) * 1.4,
+                  r: 3.5 + hash(k * 13.7) * 5 });
+}
+
+// legs
 function mkLeg(joint, side, front) {
   return { joint, side, front, phaseOffset: 0, L1: 26, L2: 22,
            foot: { x: 0, y: 0 }, planted: true, stepT: 0,
            from: { x: 0, y: 0 }, to: { x: 0, y: 0 }, cool: 0,
            toes: front ? 4 : 5 };
 }
-function makePart(pi) {
-  const g0 = CUTS[pi], g1 = CUTS[pi + 1];
-  const cx = W / 2, cy = H / 2, h0 = -Math.PI / 2;
-  const pts = [];
-  for (let g = g0; g <= g1; g++) {
-    pts.push({ x: cx - Math.cos(h0) * SEG * S * g, y: cy - Math.sin(h0) * SEG * S * g });
-  }
-  const p = { pi, g0, pts, hd: pts.map(() => h0), legs: [],
-              hasHead: pi === 0, leader: null, docked: true,
-              heading: h0, speed: 1.3, tx: 0, ty: 0, targetAge: 0,
-              stridePhase: Math.random(), wavePhase: Math.random() * 6,
-              attachR: 0, scatterT: 0, svx: 0, svy: 0, spin: 0,
-              pauseT: 0, lookT: 0, blotches: [] };
-  if (pi > 0) p.leader = parts[pi - 1];
-  // legs
-  const defs = [{ g: 6, side: -1, front: true }, { g: 6, side: 1, front: true },
-                { g: 13, side: -1, front: false }, { g: 13, side: 1, front: false }];
-  const order = [2, 0, 3, 1];
-  defs.forEach((d, di) => {
-    if (d.g >= g0 && d.g <= g1) {
-      const leg = mkLeg(d.g - g0, d.side, d.front);
-      leg.phaseOffset = order[di] * 0.25;
-      p.legs.push(leg);
-    }
-  });
-  // gold marbling blotches in body space (u along part, v lateral -1..1)
-  const nb = 7;
-  for (let k = 0; k < nb; k++) {
-    p.blotches.push({ u: hash(pi * 31 + k * 7.3), v: (hash(pi * 17 + k * 3.1) - 0.5) * 1.4,
-                      r: (3.5 + hash(k * 13.7 + pi) * 5) });
-  }
-  refreshHeadings(p);
-  for (const leg of p.legs) {
-    const t = footTarget(p, leg, legAnchor(p, leg), 26);
-    leg.foot.x = t.x; leg.foot.y = t.y;
-  }
-  return p;
+const legs = [];
+[{ g: 6, side: -1, front: true }, { g: 6, side: 1, front: true },
+ { g: 13, side: -1, front: false }, { g: 13, side: 1, front: false }].forEach((d, di) => {
+  const leg = mkLeg(d.g, d.side, d.front);
+  leg.phaseOffset = [0.5, 0, 0.75, 0.25][di]; // LH -> LF -> RH -> RF
+  legs.push(leg);
+});
+function legAnchor(leg) {
+  const j = pts[leg.joint];
+  const px = -Math.sin(hd[leg.joint]), py = Math.cos(hd[leg.joint]);
+  return { x: j.x + px * leg.side * halfWidth(leg.joint) * S * 0.9,
+           y: j.y + py * leg.side * halfWidth(leg.joint) * S * 0.9 };
 }
-function refreshHeadings(p) {
-  const n = p.pts.length;
-  for (let i = 0; i < n; i++) {
-    const a = p.pts[Math.max(0, i - 1)], b = p.pts[Math.min(n - 1, i + 1)];
-    p.hd[i] = Math.atan2(a.y - b.y, a.x - b.x);
-  }
-}
-function legAnchor(p, leg) {
-  const j = p.pts[leg.joint];
-  const px = -Math.sin(p.hd[leg.joint]), py = Math.cos(p.hd[leg.joint]);
-  return { x: j.x + px * leg.side * halfWidth(leg.joint + p.g0) * S * 0.9,
-           y: j.y + py * leg.side * halfWidth(leg.joint + p.g0) * S * 0.9 };
-}
-function footTarget(p, leg, an, dist) {
-  const h = p.hd[leg.joint];
+function footTarget(leg, an, dist) {
+  const h = hd[leg.joint];
   const ox = -Math.sin(h) * leg.side, oy = Math.cos(h) * leg.side;
   const fx = Math.cos(h), fy = Math.sin(h);
   const k = leg.front ? -0.55 : 0.55;
@@ -176,144 +156,92 @@ function footTarget(p, leg, an, dist) {
   const d = Math.hypot(dx, dy) || 1;
   return { x: an.x + dx / d * dist * S, y: an.y + dy / d * dist * S };
 }
-for (let pi = 0; pi < 6; pi++) parts.push(makePart(pi));
-
-function shatter() {
-  if (parts.some(p => !p.docked)) return;
-  const cx = W / 2, cy = H / 2;
-  for (const p of parts) {
-    if (p.pi === 0) continue;
-    p.docked = false;
-    p.attachR = 0;
-    const c = p.pts[2];
-    const a = Math.atan2(c.y - cy, c.x - cx) + (Math.random() - 0.5) * 0.8;
-    const f = (2.2 + Math.random() * 1.6) * S;
-    p.svx = Math.cos(a) * f; p.svy = Math.sin(a) * f;
-    p.spin = (Math.random() - 0.5) * 0.25;
-    p.scatterT = 45 + Math.random() * 20;
-  }
+for (const leg of legs) {
+  const t = footTarget(leg, legAnchor(leg), 26);
+  leg.foot.x = t.x; leg.foot.y = t.y;
 }
-setTimeout(shatter, 1500);
 
-function pickTarget(p) {
-  const m = 0.2;
-  p.tx = W * (m + Math.random() * (1 - 2 * m));
-  p.ty = H * (m + Math.random() * (1 - 2 * m));
-  p.targetAge = 0;
+// pointer: the head follows it
+let lastPointerT = 0;
+function setTarget(x, y) {
+  head.tx = Math.max(20, Math.min(W - 20, x));
+  head.ty = Math.max(20, Math.min(H - 20, y));
+  head.idleT = 0;
+  head.pauseT = 0;
 }
+canvas.addEventListener('pointermove', e => setTarget(e.clientX, e.clientY));
+canvas.addEventListener('pointerdown', e => setTarget(e.clientX, e.clientY));
 
 // ---------------- simulation ----------------
-function steerToward(p, tx, ty, dt, maxSp, agility) {
-  const dx = tx - p.pts[0].x, dy = ty - p.pts[0].y;
-  const d = Math.hypot(dx, dy);
-  const want = Math.atan2(dy, dx);
-  let dh = want - p.heading;
-  while (dh > Math.PI) dh -= Math.PI * 2;
-  while (dh < -Math.PI) dh += Math.PI * 2;
-  const turn = agility * dt;
-  p.heading += Math.max(-turn, Math.min(turn, dh * 0.15 * dt));
-  const sp = Math.min(maxSp, d * 0.09) * S * dt;
-  p.pts[0].x += Math.cos(p.heading) * sp;
-  p.pts[0].y += Math.sin(p.heading) * sp;
-  return sp;
-}
-
-function stepPart(p, dt, waiting) {
+function step(dt) {
+  head.idleT += dt;
   let moved = 0;
-  const n = p.pts.length;
 
-  if (p.docked && p.leader) {
-    // pinned to the leader's tail: one continuous spine
-    const t = p.leader.pts[p.leader.pts.length - 1];
-    p.pts[0].x = t.x; p.pts[0].y = t.y;
-    p.heading = p.leader.hd[p.leader.pts.length - 1];
-    moved = p.leader._moved || 0;
-  } else if (p.pi === 0) {
-    // the head: wander between targets, occasional curious pause-and-look
-    if (p.pauseT > 0) {
-      p.pauseT -= dt;
-      p.lookT += dt;
-      p.heading += Math.sin(p.lookT * 0.06) * 0.008 * dt;
-    } else {
-      if (p.tx === 0 && p.ty === 0) pickTarget(p);
-      p.targetAge += dt;
-      const dx = p.tx - p.pts[0].x, dy = p.ty - p.pts[0].y;
-      if (Math.hypot(dx, dy) < 70 * S || p.targetAge > 700) {
-        if (Math.random() < 0.25) { p.pauseT = 110; p.lookT = 0; }
-        pickTarget(p);
-      }
-      const saved = p.speed;
-      if (waiting) p.speed = 0.7;
-      moved = steerToward(p, p.tx, p.ty, dt, p.speed, 0.05);
-      p.speed = saved;
-    }
-  } else if (p.scatterT > 0) {
-    // tumbling through the water
-    p.scatterT -= dt;
-    p.svx *= 0.985; p.svy *= 0.985;
-    p.pts[0].x += p.svx * dt; p.pts[0].y += p.svy * dt;
-    p.heading += p.spin * dt;
-    moved = Math.hypot(p.svx, p.svy) * dt;
-    if (p.scatterT <= 0) { p.svx = p.svy = 0; }
-  } else {
-    // seek the leader's tail stump, then dock
-    const stump = p.leader.pts[p.leader.pts.length - 1];
-    moved = steerToward(p, stump.x, stump.y, dt, 2.4, 0.09);
-    const d = Math.hypot(p.pts[0].x - stump.x, p.pts[0].y - stump.y);
-    if (d < 30 * S) {
-      p.pts[0].x += (stump.x - p.pts[0].x) * 0.25;
-      p.pts[0].y += (stump.y - p.pts[0].y) * 0.25;
-      if (d < 14 * S && ++p.attachR > 8) {
-        p.docked = true; p.attachR = 0;
-        p.pts[0].x = stump.x; p.pts[0].y = stump.y;
-      }
-    } else p.attachR = 0;
+  // idle drift: if the pointer hasn't moved in a while, mosey gently
+  let tx = head.tx, ty = head.ty, maxSp = head.speed;
+  if (head.idleT > 420 && head.pauseT <= 0) {
+    // slow wander around the current spot
+    head.wt = (head.wt || 0) + dt * 0.004;
+    tx = head.x + Math.cos(head.wt * 2.1) * 120 * S;
+    ty = head.y + Math.sin(head.wt * 1.7) * 120 * S;
+    maxSp = 0.9;
   }
-  p._moved = moved;
 
-  // chain-follow within the part
+  if (head.pauseT > 0) {
+    // curious pause-and-look
+    head.pauseT -= dt;
+    head.lookT += dt;
+    head.heading += Math.sin(head.lookT * 0.06) * 0.008 * dt;
+  } else {
+    const dx = tx - head.x, dy = ty - head.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 24 * S && head.idleT < 420 && Math.random() < 0.004 * dt) {
+      head.pauseT = 110; head.lookT = 0; // arrived: take a look around
+    }
+    const want = Math.atan2(dy, dx);
+    let dh = want - head.heading;
+    while (dh > Math.PI) dh -= Math.PI * 2;
+    while (dh < -Math.PI) dh += Math.PI * 2;
+    const turn = 0.055 * dt;
+    head.heading += Math.max(-turn, Math.min(turn, dh * 0.16 * dt));
+    const sp = Math.min(maxSp, d * 0.09) * S * dt;
+    head.x += Math.cos(head.heading) * sp;
+    head.y += Math.sin(head.heading) * sp;
+    moved = sp;
+  }
+  pts[0].x = head.x; pts[0].y = head.y;
+
+  // body trails the head: still chain, no sway
   const seg = SEG * S;
-  for (let i = 1; i < n; i++) {
-    const a = p.pts[i - 1], q = p.pts[i];
+  for (let i = 1; i < N; i++) {
+    const a = pts[i - 1], q = pts[i];
     const dx = q.x - a.x, dy = q.y - a.y;
     const d = Math.hypot(dx, dy) || 1;
     q.x = a.x + dx / d * seg;
     q.y = a.y + dy / d * seg;
   }
+  refreshHeadings();
 
-  // no lateral sway: the body stays still and trails the head's path,
-  // moving in the head's direction
-  p.wavePhase += 0.085 * dt;
-  refreshHeadings(p);
-
-  // legs: tuck when scattered, step when walking
-  const walking = p.docked && moved > 0.004;
-  p.stridePhase = (p.stridePhase + moved / (48 * S)) % 1;
-  for (const leg of p.legs) {
+  // legs
+  head.stridePhase = (head.stridePhase + moved / (48 * S)) % 1;
+  const walking = moved > 0.004;
+  for (const leg of legs) {
     leg.cool = Math.max(0, leg.cool - dt);
-    const an = legAnchor(p, leg);
-    if (!p.docked) {
-      // tuck the legs while tumbling
-      const t = footTarget(p, leg, an, 9);
-      leg.foot.x += (t.x - leg.foot.x) * 0.1;
-      leg.foot.y += (t.y - leg.foot.y) * 0.1;
-      leg.planted = true;
-      continue;
-    }
+    const an = legAnchor(leg);
     if (leg.planted) {
       const d = Math.hypot(leg.foot.x - an.x, leg.foot.y - an.y);
       const reach = (leg.L1 + leg.L2) * S * 0.9;
-      const slot = (((p.stridePhase - leg.phaseOffset) % 1) + 1) % 1;
+      const slot = (((head.stridePhase - leg.phaseOffset) % 1) + 1) % 1;
       if (walking && d > reach * 0.94 && slot < 0.3 && leg.cool <= 0) {
         leg.from.x = leg.foot.x; leg.from.y = leg.foot.y;
-        const t = footTarget(p, leg, an, 30);
+        const t = footTarget(leg, an, 30);
         leg.to.x = t.x; leg.to.y = t.y;
         leg.stepT = 0; leg.planted = false;
       }
     } else {
       leg.stepT += dt / 13;
       const t = Math.min(1, leg.stepT);
-      const e = 1 - Math.pow(1 - t, 3); // fast lift, eased touchdown
+      const e = 1 - Math.pow(1 - t, 3);
       leg.foot.x = leg.from.x + (leg.to.x - leg.from.x) * e;
       leg.foot.y = leg.from.y + (leg.to.y - leg.from.y) * e;
       if (t >= 1) { leg.planted = true; leg.cool = 9; }
@@ -322,40 +250,35 @@ function stepPart(p, dt, waiting) {
 }
 
 // ---------------- drawing ----------------
-function bodyLoop(p, wScale) {
-  // edge points down the left, back up the right
+function bodyLoop(wScale) {
   const L = [], R = [];
-  const n = p.pts.length;
-  for (let i = 0; i < n; i++) {
-    const px = -Math.sin(p.hd[i]), py = Math.cos(p.hd[i]);
-    const w = halfWidth(i + p.g0) * S * wScale;
-    L.push([p.pts[i].x + px * w, p.pts[i].y + py * w]);
-    R.push([p.pts[i].x - px * w, p.pts[i].y - py * w]);
+  for (let i = 0; i < N; i++) {
+    const px = -Math.sin(hd[i]), py = Math.cos(hd[i]);
+    const w = halfWidth(i) * S * wScale;
+    L.push([pts[i].x + px * w, pts[i].y + py * w]);
+    R.push([pts[i].x - px * w, pts[i].y - py * w]);
   }
   return L.concat(R.reverse());
 }
 
-function drawLeg(p, leg) {
-  const a = legAnchor(p, leg);
+function drawLeg(leg) {
+  const a = legAnchor(leg);
   const s = S;
-  const h = p.hd[leg.joint];
+  const h = hd[leg.joint];
   const px = -Math.sin(h) * leg.side, py = Math.cos(h) * leg.side;
   const hx = Math.cos(h), hy = Math.sin(h);
   const wx = leg.front ? -hx : hx, wy = leg.front ? -hy : hy;
   const bs = (px * wx + py * wy) >= 0 ? 1 : -1;
   const k = solveIK(a.x, a.y, leg.foot.x, leg.foot.y, leg.L1 * s, leg.L2 * s, bs);
-  // tapered segments: thigh -> shin -> foot
   taperedSeg(a.x, a.y, k.kx, k.ky, 9 * s, 6 * s, MID);
   taperedSeg(k.kx, k.ky, leg.foot.x, leg.foot.y, 6 * s, 3.4 * s, MID);
-  // joint softening
   ctx.fillStyle = MID;
   ctx.beginPath(); ctx.arc(k.kx, k.ky, 3.4 * s, 0, Math.PI * 2); ctx.fill();
-  // toes fan out, splay wider when planted
   const fa = Math.atan2(leg.foot.y - k.ky, leg.foot.x - k.kx);
   const spread = leg.planted ? 0.5 : 0.34;
   ctx.lineCap = 'round';
   for (let ti = 0; ti < leg.toes; ti++) {
-    const ta = fa + (ti / (leg.toes - 1) - 0.5) * 2 * spread + (spread * 0.9);
+    const ta = fa + (ti / (leg.toes - 1) - 0.5) * 2 * spread + spread * 0.9;
     const len = (6.5 - Math.abs(ti - (leg.toes - 1) / 2) * 1.1) * s;
     taperedSeg(leg.foot.x, leg.foot.y,
                leg.foot.x + Math.cos(ta) * len, leg.foot.y + Math.sin(ta) * len,
@@ -363,114 +286,37 @@ function drawLeg(p, leg) {
   }
 }
 
-function drawRunBody(run) {
-  // one continuous body for a run of docked parts — no seams
-  const pts = [];
-  run.forEach((p, ri) => {
-    p.pts.forEach((q, li) => {
-      if (ri > 0 && li === 0) return; // shared boundary joint
-      pts.push({ x: q.x, y: q.y, gi: p.g0 + li });
-    });
-  });
-  const n = pts.length;
-  const hd = pts.map((_, i) => {
-    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
-    return Math.atan2(a.y - b.y, a.x - b.x);
-  });
-  const loop = (wScale) => {
-    const L = [], R = [];
-    for (let i = 0; i < n; i++) {
-      const px = -Math.sin(hd[i]), py = Math.cos(hd[i]);
-      const w = halfWidth(pts[i].gi) * S * wScale;
-      L.push([pts[i].x + px * w, pts[i].y + py * w]);
-      R.push([pts[i].x - px * w, pts[i].y - py * w]);
-    }
-    return L.concat(R.reverse());
-  };
+function drawFace() {
   const s = S;
-
-  // soft shadow
-  ctx.save();
-  ctx.filter = 'blur(6px)';
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.translate(7 * s, 11 * s);
-  smoothLoop(loop(1));
-  ctx.fill();
-  ctx.restore();
-
-  // countershaded nested silhouettes
-  smoothLoop(loop(1));    ctx.fillStyle = EDGE;   ctx.fill();
-  smoothLoop(loop(0.7));  ctx.fillStyle = MID;    ctx.fill();
-  smoothLoop(loop(0.48)); ctx.fillStyle = DORSAL; ctx.fill();
-
-  // gold marbling in body space, clipped to the body
-  ctx.save();
-  smoothLoop(loop(1)); ctx.clip();
-  for (const p of run) {
-    for (const b of p.blotches) {
-      const fi = b.u * (p.pts.length - 1);
-      const i0 = Math.floor(fi), i1 = Math.min(p.pts.length - 1, i0 + 1), ft = fi - i0;
-      const sx = p.pts[i0].x * (1 - ft) + p.pts[i1].x * ft;
-      const sy = p.pts[i0].y * (1 - ft) + p.pts[i1].y * ft;
-      const hdb = p.hd[i0] * (1 - ft) + p.hd[i1] * ft;
-      const px = -Math.sin(hdb), py = Math.cos(hdb);
-      const w = halfWidth(i0 + p.g0) * S;
-      const bx = sx + px * b.v * w, by = sy + py * b.v * w;
-      const r = b.r * S * 1.3;
-      const g = ctx.createRadialGradient(bx, by, 0, bx, by, r);
-      g.addColorStop(0, 'rgba(224,179,78,0.30)');
-      g.addColorStop(1, 'rgba(224,179,78,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
-    }
-  }
-  ctx.restore();
-
-  // rim light
-  ctx.strokeStyle = RIM;
-  ctx.lineWidth = 2 * s;
-  smoothLoop(loop(0.97));
-  ctx.stroke();
-
-  if (run[0].pi === 0) drawFace(run[0]);
-}
-
-function drawFace(p) {
-  const s = S;
-  const ex = p.pts[1].x * 0.6 + p.pts[2].x * 0.4;
-  const ey = p.pts[1].y * 0.6 + p.pts[2].y * 0.4;
-  const eh = p.hd[1];
+  const ex = pts[1].x * 0.6 + pts[2].x * 0.4;
+  const ey = pts[1].y * 0.6 + pts[2].y * 0.4;
+  const eh = hd[1];
   const epx = -Math.sin(eh), epy = Math.cos(eh);
   const ew = halfWidth(1.5) * s;
   for (const sd of [-1, 1]) {
     const cxp = ex + epx * sd * ew * 0.55, cyp = ey + epy * sd * ew * 0.55;
-    // amber iris with depth
     const g = ctx.createRadialGradient(cxp - 1.5 * s, cyp - 1.5 * s, 0.5 * s, cxp, cyp, 5.2 * s);
     g.addColorStop(0, IRIS_A);
     g.addColorStop(1, IRIS_B);
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(cxp, cyp, 5.2 * s, 0, Math.PI * 2); ctx.fill();
-    // pupil
     ctx.fillStyle = '#141a12';
-    ctx.beginPath(); ctx.arc(cxp + Math.cos(p.heading) * 1 * s, cyp + Math.sin(p.heading) * 1 * s, 2.4 * s, 0, Math.PI * 2); ctx.fill();
-    // sharp specular highlight
+    ctx.beginPath(); ctx.arc(cxp + Math.cos(head.heading) * 1 * s, cyp + Math.sin(head.heading) * 1 * s, 2.4 * s, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
     ctx.beginPath(); ctx.arc(cxp - 1.7 * s, cyp - 1.9 * s, 1.4 * s, 0, Math.PI * 2); ctx.fill();
   }
-  // gentle mouth line
-  const hx = Math.cos(p.hd[0]), hy = Math.sin(p.hd[0]);
+  const hx = Math.cos(hd[0]), hy = Math.sin(hd[0]);
   ctx.strokeStyle = 'rgba(20,30,20,0.55)';
   ctx.lineWidth = 1.6 * s;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.arc(p.pts[0].x + hx * 4 * s, p.pts[0].y + hy * 4 * s, 5 * s, p.hd[0] + 0.7, p.hd[0] + Math.PI - 0.7);
+  ctx.arc(pts[0].x + hx * 4 * s, pts[0].y + hy * 4 * s, 5 * s, hd[0] + 0.7, hd[0] + Math.PI - 0.7);
   ctx.stroke();
 }
 
 function draw() {
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
-  // drifting motes
   const t = performance.now() / 1000;
   for (const m of motes) {
     m.x += m.vx; m.y += m.vy;
@@ -480,45 +326,64 @@ function draw() {
     ctx.fillStyle = `rgba(210,255,240,${(m.a * tw).toFixed(3)})`;
     ctx.beginPath(); ctx.arc(m.x * W, m.y * H, m.r * S, 0, Math.PI * 2); ctx.fill();
   }
-  // legs first (roots tuck under the body), then bodies tail->head.
-  // docked runs render as one seamless body.
-  for (const p of parts) for (const leg of p.legs) drawLeg(p, leg);
-  const runs = [];
-  const ordered = [...parts].sort((a, b) => a.pi - b.pi);
-  for (const p of ordered) {
-    const lastRun = runs[runs.length - 1];
-    if (p.docked && lastRun && lastRun[lastRun.length - 1].pi === p.pi - 1 &&
-        lastRun[lastRun.length - 1].docked) {
-      lastRun.push(p);
-    } else {
-      runs.push([p]);
-    }
+
+  for (const leg of legs) drawLeg(leg);
+
+  const s = S;
+  ctx.save();
+  ctx.filter = 'blur(6px)';
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.translate(7 * s, 11 * s);
+  smoothLoop(bodyLoop(1));
+  ctx.fill();
+  ctx.restore();
+
+  smoothLoop(bodyLoop(1));    ctx.fillStyle = EDGE;   ctx.fill();
+  smoothLoop(bodyLoop(0.7));  ctx.fillStyle = MID;    ctx.fill();
+  smoothLoop(bodyLoop(0.48)); ctx.fillStyle = DORSAL; ctx.fill();
+
+  ctx.save();
+  smoothLoop(bodyLoop(1)); ctx.clip();
+  for (const b of blotches) {
+    const i0 = Math.floor(b.u), i1 = Math.min(N - 1, i0 + 1), ft = b.u - i0;
+    const sx = pts[i0].x * (1 - ft) + pts[i1].x * ft;
+    const sy = pts[i0].y * (1 - ft) + pts[i1].y * ft;
+    const hdb = hd[i0] * (1 - ft) + hd[i1] * ft;
+    const px = -Math.sin(hdb), py = Math.cos(hdb);
+    const w = halfWidth(i0) * S;
+    const bx = sx + px * b.v * w, by = sy + py * b.v * w;
+    const r = b.r * S * 1.3;
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, r);
+    g.addColorStop(0, 'rgba(224,179,78,0.30)');
+    g.addColorStop(1, 'rgba(224,179,78,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
   }
-  for (let i = runs.length - 1; i >= 0; i--) drawRunBody(runs[i]);
+  ctx.restore();
+
+  ctx.strokeStyle = RIM;
+  ctx.lineWidth = 2 * s;
+  smoothLoop(bodyLoop(0.97));
+  ctx.stroke();
+
+  drawFace();
+
   ctx.fillStyle = 'rgba(220,240,225,0.5)';
   ctx.font = `${13 * S}px system-ui, sans-serif`;
-  ctx.fillText('click to shatter it', 14, H - 16);
+  ctx.fillText('move your mouse / touch — it follows', 14, H - 16);
 }
 
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(3, (now - last) / 16.667);
   last = now;
-  const waiting = parts.some(p => !p.docked);
-  // head part first so followers can read its fresh tail
-  const order = [...parts].sort((a, b) => a.pi - b.pi);
-  for (const p of order) stepPart(p, dt, waiting);
+  step(dt);
   draw();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
-canvas.addEventListener('pointerdown', () => shatter());
-
-window.SAL = {
-  parts, shatter,
-  whole() { return parts.every(p => p.docked); }
-};
+window.SAL = {};
 </script>
 </body>
 </html>
