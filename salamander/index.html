@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Salamander · a procedural sketch</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #02594c; height: 100%; }
+  canvas { display: block; }
+  #hint {
+    position: fixed; left: 12px; bottom: 10px; z-index: 2;
+    font: 13px/1.4 monospace; color: rgba(255,255,255,.55);
+    pointer-events: none; user-select: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hint">click / tap: split the body &nbsp;·&nbsp; N: toggle numbers</div>
+<script>
+'use strict';
+// Procedural salamander, rebuilt from Hans's June 2020 sketch.
+// Nine segments: a wandering head and eight body cells. Each cell is a
+// flocking agent that seeks a slot on the spine trailing behind the head.
+// Slots are claimed greedily by proximity, so after a split the body
+// re-forms in whatever order the cells arrive in, exactly like the original.
+// Click scatters the body; the flock pulls it back together.
+
+const TEAL = '#02594c';
+const INK = 'rgba(240,244,242,0.92)';
+const N = 9;                 // 1 head + 8 body cells
+const SPACING = 34;          // spine slot spacing (px at 800x600-ish scale)
+const HEAD_R = 17, BODY_R = 14;
+
+let W = 0, H = 0, S = 1;     // S = scale relative to the 800x600 original
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W; cv.height = H;
+  S = Math.min(W / 800, H / 600);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// deterministic-ish rng for the odd wobble; Math.random is fine here
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+class Seg {
+  constructor(i) {
+    this.i = i;
+    this.head = i === 0;
+    this.r = (this.head ? HEAD_R : BODY_R) * S;
+    this.x = rnd(W * 0.3, W * 0.7);
+    this.y = rnd(H * 0.3, H * 0.7);
+    const a = rnd(0, Math.PI * 2);
+    this.vx = Math.cos(a); this.vy = Math.sin(a);
+    this.heading = a;
+    this.wanderT = rnd(0, 1000);
+    this.slot = -1;
+  }
+  get speed() { return Math.hypot(this.vx, this.vy); }
+  steer(tx, ty, maxSpeed, maxForce, arrive) {
+    let dx = tx - this.x, dy = ty - this.y;
+    const d = Math.hypot(dx, dy) || 1;
+    let sp = maxSpeed;
+    if (arrive && d < 90 * S) sp = maxSpeed * (d / (90 * S));
+    dx = dx / d * sp; dy = dy / d * sp;
+    let fx = dx - this.vx, fy = dy - this.vy;
+    const f = Math.hypot(fx, fy) || 1;
+    if (f > maxForce) { fx = fx / f * maxForce; fy = fy / f * maxForce; }
+    this.vx += fx; this.vy += fy;
+  }
+  update() {
+    const sp = this.speed, max = (this.head ? 2.1 : 3.1) * S;
+    if (sp > max) { this.vx = this.vx / sp * max; this.vy = this.vy / sp * max; }
+    // gentle drag so impulses decay
+    this.vx *= 0.995; this.vy *= 0.995;
+    this.x += this.vx; this.y += this.vy;
+    if (sp > 0.2) this.heading = Math.atan2(this.vy, this.vx);
+    // soft containment
+    const m = 70 * S;
+    if (this.x < m) this.vx += 0.06 * S;
+    if (this.x > W - m) this.vx -= 0.06 * S;
+    if (this.y < m) this.vy += 0.06 * S;
+    if (this.y > H - m) this.vy -= 0.06 * S;
+  }
+  draw(showNums) {
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = Math.max(1.5, 2 * S);
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.stroke();
+    // heading tick, like the original
+    const tx = this.x + Math.cos(this.heading) * this.r;
+    const ty = this.y + Math.sin(this.heading) * this.r;
+    ctx.beginPath();
+    ctx.moveTo(this.x + Math.cos(this.heading) * this.r * 0.45,
+               this.y + Math.sin(this.heading) * this.r * 0.45);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    if (showNums && !this.head) {
+      ctx.fillStyle = 'rgba(240,244,242,0.75)';
+      ctx.font = `${Math.max(11, 13 * S)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText(String(this.i + 1), this.x, this.y - this.r - 6 * S);
+    } else if (showNums) {
+      ctx.fillStyle = 'rgba(240,244,242,0.75)';
+      ctx.font = `${Math.max(11, 13 * S)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('1', this.x, this.y - this.r - 6 * S);
+    }
+  }
+}
+
+const segs = [];
+for (let i = 0; i < N; i++) segs.push(new Seg(i));
+const head = segs[0];
+let showNums = true;
+
+// head trail: the body follows where the head HAS BEEN, not a rigid
+// line behind its current heading. This is what makes the chain curve
+// smoothly like the original.
+const trail = [];
+const TRAIL_GAP = 18; // frames between spine slots
+
+// slot assignment is sticky: computed greedily at split time, then kept.
+// the cells take whichever slot they reach first, so the chain re-forms
+// in scrambled order like the original, without mid-swim target swapping.
+let assigned = new Array(N).fill(-1);
+function assignSlots() {
+  const sp = slots();
+  const claimed = new Array(N - 1).fill(false);
+  const order = [];
+  for (let i = 1; i < N; i++) {
+    for (let k = 0; k < N - 1; k++) {
+      const dx = segs[i].x - sp[k][0], dy = segs[i].y - sp[k][1];
+      order.push([dx * dx + dy * dy, i, k]);
+    }
+  }
+  order.sort((a, b) => a[0] - b[0]);
+  assigned = new Array(N).fill(-1);
+  for (const [, i, k] of order) {
+    if (assigned[i] === -1 && !claimed[k]) { assigned[i] = k; claimed[k] = true; }
+  }
+}
+
+function slots() {
+  const out = [];
+  for (let k = 1; k < N; k++) {
+    const idx = Math.min(trail.length - 1, k * TRAIL_GAP);
+    if (idx >= 0) out.push([trail[idx][0], trail[idx][1]]);
+    else out.push([head.x - Math.cos(head.heading) * k * SPACING * S,
+                   head.y - Math.sin(head.heading) * k * SPACING * S]);
+  }
+  return out;
+}
+
+// value-noise wander for the head
+function noise1(t) {
+  return Math.sin(t * 0.9) * 0.55 + Math.sin(t * 2.17 + 1.3) * 0.3 + Math.sin(t * 4.71 + 4.1) * 0.15;
+}
+
+function slots() {
+  // slot k sits k*SPACING behind the head along its heading
+  const hx = Math.cos(head.heading), hy = Math.sin(head.heading);
+  const out = [];
+  for (let k = 1; k < N; k++) {
+    out.push([head.x - hx * k * SPACING * S, head.y - hy * k * SPACING * S]);
+  }
+  return out;
+}
+
+function step() {
+  // head wanders: steer toward a point ahead, nudged sideways by smooth noise
+  head.wanderT += 0.005;
+  const wa = noise1(head.wanderT) * 0.35;
+  const hx = Math.cos(head.heading), hy = Math.sin(head.heading);
+  head.steer(
+    head.x + hx * 80 * S - hy * wa * 80 * S,
+    head.y + hy * 80 * S + hx * wa * 80 * S,
+    2.0 * S, 0.045 * S, false
+  );
+  head.update();
+
+  // record the trail AFTER the head moves
+  trail.unshift([head.x, head.y]);
+  if (trail.length > N * TRAIL_GAP + 40) trail.pop();
+
+  const sp = slots();
+
+  for (let i = 1; i < N; i++) {
+    const s = segs[i];
+    const t = sp[assigned[i] === -1 ? 0 : assigned[i]];
+    s.steer(t[0], t[1], 3.2 * S, 0.1 * S, true);
+    // separation: don't stack on each other
+    for (let j = 1; j < N; j++) {
+      if (j === i) continue;
+      const o = segs[j];
+      const dx = s.x - o.x, dy = s.y - o.y;
+      const d = Math.hypot(dx, dy);
+      const minD = (s.r + o.r) * 1.05;
+      if (d > 0.01 && d < minD) {
+        s.vx += (dx / d) * 0.08 * S;
+        s.vy += (dy / d) * 0.08 * S;
+      }
+    }
+    s.update();
+  }
+}
+
+function draw() {
+  ctx.fillStyle = TEAL;
+  ctx.fillRect(0, 0, W, H);
+  for (const s of segs) s.draw(showNums);
+}
+
+function loop() { step(); draw(); requestAnimationFrame(loop); }
+loop();
+
+// split the body: radial impulse from the click point,
+// then re-deal the slots: nearest cell takes nearest slot.
+function split(x, y) {
+  for (const s of segs) {
+    let dx = s.x - x, dy = s.y - y;
+    let d = Math.hypot(dx, dy);
+    if (d < 1) { const a = rnd(0, Math.PI * 2); dx = Math.cos(a); dy = Math.sin(a); d = 1; }
+    const f = (5 + Math.random() * 5) * S * Math.max(0.35, 1 - d / (500 * S));
+    s.vx += (dx / d) * f;
+    s.vy += (dy / d) * f;
+  }
+  assignSlots();
+}
+window.addEventListener('pointerdown', (e) => split(e.clientX, e.clientY));
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'n' || e.key === 'N') showNums = !showNums;
+});
+
+// open scattered, like the video: one split at load so it re-forms on sight
+assignSlots();
+setTimeout(() => split(W / 2 + rnd(-60, 60), H / 2 + rnd(-60, 60)), 400);
+</script>
+</body>
+</html>
