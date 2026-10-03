@@ -153,7 +153,9 @@ function footTarget(leg, an, dist) {
   const h = hd[leg.joint];
   const ox = -Math.sin(h) * leg.side, oy = Math.cos(h) * leg.side;
   const fx = Math.cos(h), fy = Math.sin(h);
-  const k = leg.front ? -0.55 : 0.55;
+  // feet land forward-biased (front feet reach forward to brake, hind land
+  // slightly forward then push back); the body moving over them makes the arc
+  const k = leg.front ? 0.35 : 0.15;
   let dx = ox + fx * k, dy = oy + fy * k;
   const d = Math.hypot(dx, dy) || 1;
   return { x: an.x + dx / d * dist * S, y: an.y + dy / d * dist * S };
@@ -291,27 +293,28 @@ function drawLeg(leg) {
   const a = legAnchor(leg);
   const s = S;
   const h = hd[leg.joint];
-  const px = -Math.sin(h) * leg.side, py = Math.cos(h) * leg.side;
-  const hx = Math.cos(h), hy = Math.sin(h);
-  const wx = leg.front ? -hx : hx, wy = leg.front ? -hy : hy;
-  const bs = (px * wx + py * wy) >= 0 ? 1 : -1;
-  const k = solveIK(a.x, a.y, leg.foot.x, leg.foot.y, leg.L1 * s, leg.L2 * s, bs);
+  const ox = -Math.sin(h) * leg.side, oy = Math.cos(h) * leg.side; // outward
+  const fx = Math.cos(h), fy = Math.sin(h);                       // forward
+  // knee placed explicitly: elbows point back, knees point forward. Always.
+  // (the old IK bend heuristic could flip the joint the wrong way)
+  const bk = leg.front ? -0.6 : 0.6;
+  let kx = ox + fx * bk, ky = oy + fy * bk;
+  const kd = Math.hypot(kx, ky) || 1;
+  let klx = a.x + kx / kd * leg.L1 * s;
+  let kly = a.y + ky / kd * leg.L1 * s;
   // crouch: mid-stance the knee pushes outward as the leg loads
   const load = leg.load || 0;
   if (load > 0.01) {
-    const lx = k.kx - a.x, ly = k.ky - a.y;
-    const ld = Math.hypot(lx, ly) || 1;
-    const ox = -ly / ld * bs, oy = lx / ld * bs;
-    k.kx += ox * load * 2.5 * s;
-    k.ky += oy * load * 2.5 * s;
+    klx += ox * load * 2.5 * s;
+    kly += oy * load * 2.5 * s;
   }
   // short, thick, fleshy limb
-  taperedSeg(a.x, a.y, k.kx, k.ky, 10 * s, 7.5 * s, MID);
-  taperedSeg(k.kx, k.ky, leg.foot.x, leg.foot.y, 7.5 * s, 5 * s, MID);
+  taperedSeg(a.x, a.y, klx, kly, 10 * s, 7.5 * s, MID);
+  taperedSeg(klx, kly, leg.foot.x, leg.foot.y, 7.5 * s, 5 * s, MID);
   ctx.fillStyle = MID;
-  ctx.beginPath(); ctx.arc(k.kx, k.ky, 4 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(klx, kly, 4 * s, 0, Math.PI * 2); ctx.fill();
   // flat fanned foot: palm blob + stubby toe bumps
-  const fa = Math.atan2(leg.foot.y - k.ky, leg.foot.x - k.kx);
+  const fa = Math.atan2(leg.foot.y - kly, leg.foot.x - klx);
   const peelA = (leg.peel || 0) * 0.5;
   const fwdX = Math.cos(fa - peelA), fwdY = Math.sin(fa - peelA);
   ctx.fillStyle = MID;
