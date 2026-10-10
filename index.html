@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Creative Experiments: a sketchbook of living things</title>
+<meta name="description" content="Three procedural studies by Hans: a bloom of jellyfish, a hand-following salamander, and a woven figure at rest.">
+<meta name="theme-color" content="#0d0d10">
+<style>
+@font-face {
+  font-family: 'Fraunces'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('assets/fonts/Fraunces-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fraunces'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('assets/fonts/Fraunces-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fraunces'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url('assets/fonts/Fraunces-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Plex Mono'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('assets/fonts/IBMPlexMono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Plex Mono'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('assets/fonts/IBMPlexMono-500.woff2') format('woff2');
+}
+
+:root {
+  --wall: #0d0d10;
+  --wall-deep: #08080a;
+  --ink: #ece7db;
+  --ink-soft: #a39d8e;
+  --rule: #26262b;
+  --red: #e0654a;
+  --gold: #d9a441;
+  --jelly: #5b8fc4;
+  --sally: #35b184;
+  --hut: #d9a441;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--wall);
+  color: var(--ink);
+  font-family: 'Fraunces', Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--gold); color: #0d0d10; }
+/* paper grain */
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50; opacity: .5;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E");
+}
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+
+.mono { font-family: 'Plex Mono', ui-monospace, monospace; }
+
+/* ---------- header ---------- */
+header.book {
+  padding: 72px 0 40px;
+  border-bottom: 1px solid var(--rule);
+}
+.kicker {
+  font-family: 'Plex Mono', ui-monospace, monospace;
+  font-size: 12px; letter-spacing: .32em; text-transform: uppercase;
+  color: var(--red); margin: 0 0 22px;
+}
+h1.title {
+  font-size: clamp(44px, 7vw, 88px);
+  line-height: 1.02; font-weight: 600; letter-spacing: -0.015em;
+  margin: 0 0 20px; max-width: 14ch;
+}
+h1.title em { font-style: italic; font-weight: 400; }
+.lede {
+  font-size: clamp(17px, 2.2vw, 21px); line-height: 1.65;
+  color: var(--ink-soft); max-width: 56ch; margin: 0;
+}
+.lede strong { color: var(--ink); font-weight: 600; }
+
+/* ---------- specimen plates ---------- */
+.plate {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 48px;
+  padding: 72px 0; align-items: center;
+  border-bottom: 1px solid var(--rule);
+}
+.plate:last-of-type { border-bottom: none; }
+.plate.flip .frame { order: 2; }
+.plate.flip .notes { order: 1; }
+
+.frame {
+  position: relative; background: #141417;
+  border: 1px solid var(--rule);
+  padding: 14px; box-shadow: 0 2px 0 rgba(0,0,0,.5), 0 24px 60px -20px rgba(0,0,0,.8);
+}
+.frame img { display: block; width: 100%; height: auto; aspect-ratio: 16/10; object-fit: cover; }
+.frame .pin {
+  position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+  width: 18px; height: 18px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f2d488, var(--gold) 70%);
+  box-shadow: 0 2px 6px rgba(0,0,0,.7);
+}
+.frame img.tall { aspect-ratio: auto; max-height: 520px; object-fit: contain; background: #0d0705; }
+.frame figcaption {
+  display: flex; justify-content: space-between; align-items: baseline;
+  flex-wrap: wrap; gap: 2px 14px;
+  padding: 12px 4px 2px;
+  font-family: 'Plex Mono', ui-monospace, monospace; font-size: 11.5px;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft);
+}
+
+.spec-no {
+  font-family: 'Plex Mono', ui-monospace, monospace;
+  font-size: 13px; letter-spacing: .28em; color: var(--accent, var(--red));
+  margin: 0 0 14px; text-transform: uppercase; font-weight: 500;
+}
+.spec-no::before { content: ""; display: inline-block; width: 34px; height: 2px; background: var(--accent, var(--red)); vertical-align: middle; margin-right: 12px; }
+h2.spec-title { font-size: clamp(30px, 4vw, 46px); font-weight: 600; letter-spacing: -0.01em; line-height: 1.08; margin: 0 0 10px; }
+.spec-medium {
+  font-family: 'Plex Mono', ui-monospace, monospace; font-size: 12.5px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 18px;
+}
+.spec-note { font-size: 18px; line-height: 1.7; color: var(--ink-soft); margin: 0 0 28px; max-width: 40ch; }
+.spec-note strong { color: var(--ink); font-weight: 600; }
+
+.door {
+  display: inline-flex; align-items: center; gap: 12px;
+  font-family: 'Plex Mono', ui-monospace, monospace; font-size: 14px; font-weight: 500;
+  letter-spacing: .06em; text-decoration: none; color: #0d0d10;
+  background: var(--ink); padding: 14px 22px; border-radius: 3px;
+  transition: transform .18s ease, background .18s ease;
+}
+.door:hover { background: var(--accent, var(--gold)); color: #0d0d10; transform: translateY(-2px); }
+.door svg { width: 18px; height: 18px; }
+.hint {
+  display: block; margin-top: 14px;
+  font-family: 'Plex Mono', ui-monospace, monospace; font-size: 12px;
+  letter-spacing: .08em; color: var(--ink-soft);
+}
+
+/* ---------- divider squiggle ---------- */
+.squiggle { display: block; width: 120px; height: 14px; margin: 0 auto; color: var(--red); }
+
+/* ---------- colophon ---------- */
+footer.colo {
+  border-top: 1px solid var(--rule);
+  padding: 44px 0 72px; margin-top: 24px;
+  display: flex; flex-wrap: wrap; gap: 24px; justify-content: space-between; align-items: baseline;
+}
+footer.colo p {
+  font-family: 'Plex Mono', ui-monospace, monospace; font-size: 12.5px;
+  letter-spacing: .06em; line-height: 1.9; color: var(--ink-soft); margin: 0; max-width: 62ch;
+}
+footer.colo a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+footer.colo a:hover { color: var(--red); }
+
+@media (max-width: 820px) {
+  .plate { grid-template-columns: 1fr; gap: 28px; padding: 52px 0; }
+  .plate.flip .frame { order: 0; }
+  .plate.flip .notes { order: 0; }
+  header.book { padding: 52px 0 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .door { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="book">
+  <div class="wrap">
+    <p class="kicker">Field notes &middot; three studies</p>
+    <h1 class="title">Creative <em>Experiments</em></h1>
+    <p class="lede">A sketchbook of <strong>living things</strong>. Each study is a small creature or world, drawn in code and left running. Open one, move your cursor, and it will notice you.</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="plate" style="--accent: var(--jelly)">
+    <figure class="frame">
+      <span class="pin" aria-hidden="true"></span>
+      <img src="assets/posters/jellyfish.png" alt="A bloom of translucent jellyfish drifting in deep blue water" loading="lazy">
+      <figcaption><span>Plate I</span><span>WebGL &middot; three.js</span></figcaption>
+    </figure>
+    <div class="notes">
+      <p class="spec-no">No. 01</p>
+      <h2 class="spec-title">Aurelia Study V7</h2>
+      <p class="spec-medium">Canvas &middot; WebGL &middot; pointer reactive</p>
+      <p class="spec-note">A bloom of moon jellies pulsing in deep water, each one procedurally grown. <strong>Tap anywhere</strong> and the water answers.</p>
+      <a class="door" href="jellyfish/">
+        Enter the water
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+      </a>
+      <span class="hint">Best with sound off and curiosity on.</span>
+    </div>
+  </section>
+
+  <section class="plate flip" style="--accent: var(--sally)">
+    <figure class="frame">
+      <span class="pin" aria-hidden="true"></span>
+      <img src="assets/posters/salamander.png" alt="A procedural green salamander following the cursor" loading="lazy">
+      <figcaption><span>Plate II</span><span>2D canvas &middot; procedural</span></figcaption>
+    </figure>
+    <div class="notes">
+      <p class="spec-no">No. 02</p>
+      <h2 class="spec-title">Salamander</h2>
+      <p class="spec-medium">Canvas &middot; 2D &middot; pointer reactive</p>
+      <p class="spec-note">A small amphibian that <strong>follows your hand</strong> across the screen, planting each footstep as it walks. No two crossings look alike.</p>
+      <a class="door" href="salamander/">
+        Meet the salamander
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+      </a>
+      <span class="hint">Move your mouse, or drag a finger.</span>
+    </div>
+  </section>
+
+  <section class="plate" style="--accent: var(--hut)">
+    <figure class="frame">
+      <span class="pin" aria-hidden="true"></span>
+      <img class="tall" src="assets/posters/tbtgh.png" alt="A woven figure resting before kente cloth, desert sand, and a thatched hut" loading="lazy">
+      <figcaption><span>Plate III</span><span>p5.js &middot; generative</span></figcaption>
+    </figure>
+    <div class="notes">
+      <p class="spec-no">No. 03</p>
+      <h2 class="spec-title">Too Big To Go Home</h2>
+      <p class="spec-medium">Canvas &middot; p5.js &middot; generative &middot; in progress</p>
+      <p class="spec-note">A woven figure at rest: Asante kente cloth, a carved wood frame, desert sand, and a thatched hut, <strong>rebuilt layer by layer</strong> from a single image. Reload it. It never weaves the same way twice.</p>
+      <a class="door" href="too-big-to-go-home/">
+        Visit the figure
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+      </a>
+      <span class="hint">One reload in a thousand shows the original reference.</span>
+    </div>
+  </section>
+
+</main>
+
+<footer class="colo">
+  <div class="wrap" style="display:flex; flex-wrap:wrap; gap:24px; justify-content:space-between; width:100%;">
+    <p>Set in Fraunces and Plex Mono, self hosted. The studies are untouched; only the gallery is new.<br>Kept by <a href="https://github.com/builtbysai">Hans</a> &middot; <a href="https://github.com/builtbysai/creative-experiments-redesign">source</a></p>
+    <svg class="squiggle" viewBox="0 0 120 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 8 Q 12 2, 22 8 T 42 8 T 62 8 T 82 8 T 102 8 T 122 8"/></svg>
+  </div>
+</footer>
+
+</body>
+</html>
