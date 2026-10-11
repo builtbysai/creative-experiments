@@ -8,8 +8,9 @@ Near-black walls, one piece per room. The studies themselves are untouched; only
 
 ## The pieces
 
-- **[Aurelia Study V7](https://builtbysai.com/creative-experiments/jellyfish/)**: a bloom of moon jellies pulsing in deep water, each one procedurally grown. WebGL, pointer reactive. Tap anywhere and the water answers.
+- **[Aurelia Study](https://builtbysai.com/creative-experiments/jellyfish/)**: a bloom of moon jellies pulsing in deep water, each one procedurally grown. WebGL, pointer reactive. Tap anywhere and the water answers.
 - **[Salamander](https://builtbysai.com/creative-experiments/salamander/)**: a small amphibian that follows your hand across the screen, planting each footstep as it walks. 2D canvas, pointer reactive. No two crossings look alike.
 - **[Too Big To Go Home](https://builtbysai.com/creative-experiments/too-big-to-go-home/)**: a woven figure at rest: Asante kente cloth, a carved wood frame, desert sand, and a thatched hut, rebuilt layer by layer from a single image. p5.js, generative. In progress.
+- **[Wirefang: K-9 / Zero](https://builtbysai.com/creative-experiments/wirefang/)**: drawn in high school, 2019. Traced by code; every refresh deals a new background and palette.
 
 Some pieces are still in progress. I revisit them between other work.
