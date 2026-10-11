@@ -1,7 +1,15 @@
 # Creative Experiments
 
-A home for my creative coding experiments — generative art, visual studies, and works in progress. Each project lives in its own subfolder with a live demo via GitHub Pages.
+A sketchbook of living things: my generative art studies, hung like a black-box gallery.
 
-## Projects
+**Live:** https://builtbysai.com/creative-experiments/
 
-- **[Too Big To Go Home](too-big-to-go-home/)** — a layered procedural p5.js rebuild of an AI-generated artwork: Asante kente cloth, carved wood frame, painted desert sand, a woven Afrocentric cactus, a generative sun, and a round thatched hut. In progress.
+Near-black walls, one piece per room. The studies themselves are untouched; only the gallery is new.
+
+## The pieces
+
+- **[Aurelia Study V7](https://builtbysai.com/creative-experiments/jellyfish/)**: a bloom of moon jellies pulsing in deep water, each one procedurally grown. WebGL, pointer reactive. Tap anywhere and the water answers.
+- **[Salamander](https://builtbysai.com/creative-experiments/salamander/)**: a small amphibian that follows your hand across the screen, planting each footstep as it walks. 2D canvas, pointer reactive. No two crossings look alike.
+- **[Too Big To Go Home](https://builtbysai.com/creative-experiments/too-big-to-go-home/)**: a woven figure at rest: Asante kente cloth, a carved wood frame, desert sand, and a thatched hut, rebuilt layer by layer from a single image. p5.js, generative. In progress.
+
+Some pieces are still in progress. I revisit them between other work.
