@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wirefang: K-9 / Zero — Creative Experiments</title>
-<meta name="description" content="A 2019 line drawing of a dog, traced by code and grown back as a generative study.">
+<meta name="description" content="A 2019 line drawing of a dog, traced by code. One piece, endless views — every refresh deals a new background and palette.">
 <meta name="theme-color" content="#0d0d10">
 <style>
 @font-face {
@@ -34,7 +34,6 @@
   --ink-soft: #a39d8e;
   --rule: #26262b;
   --gold: #d9a441;
-  --paper: #f4f1e8;
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -76,7 +75,6 @@ section.study { padding: 56px 0; border-bottom: 1px solid var(--rule); }
 
 .stage { position: relative; border: 1px solid var(--rule); background: var(--wall-deep); }
 .stage canvas { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; }
-.stage.paper { background: var(--paper); }
 .controls { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; align-items: center; }
 button.act {
   font-family: 'Plex Mono', monospace; font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
@@ -106,43 +104,26 @@ footer.colo a:hover { color: var(--gold); }
     <a class="back" href="../">&larr; The sketchbook</a>
     <p class="kicker">Creative Experiments &middot; № 04</p>
     <h1 class="title">Wirefang: K-9 / Zero</h1>
-    <p class="lede">A 2019 line drawing of a dog, <strong>traced by code</strong> and grown back as something new.
-    Nothing below is a pasted image &mdash; the outline was recovered from the original pixel by pixel,
-    and everything you see is drawn by your browser.</p>
+    <p class="lede">A 2019 line drawing of a dog, <strong>traced by code</strong> &mdash; 127 strokes recovered
+    pixel by pixel. The outline never changes. Everything around it does:
+    <strong>every refresh deals a new background, palette, and light</strong> from the lineage of the originals below.</p>
   </div>
 </header>
 
 <main class="wrap">
 
-  <section class="study" id="study-one">
+  <section class="study" id="piece">
     <div class="study-head">
-      <span class="study-no">Study I</span>
-      <h2 class="study-title">The outline, drawn by code</h2>
+      <span class="study-no">The piece</span>
+      <h2 class="study-title">One dog, endless views</h2>
     </div>
-    <p class="study-note"><strong>127 strokes</strong> recovered from the 2019 original: threshold the ink,
-    thin it to a one-pixel skeleton, trace every branch. Press replay and watch the pen retrace the dog.</p>
-    <div class="stage paper">
-      <canvas id="outlineCanvas" width="880" height="880" aria-label="The recovered outline being drawn stroke by stroke"></canvas>
-    </div>
-    <div class="controls">
-      <button class="act" id="replayBtn" type="button">Replay the drawing</button>
-      <span class="seedline mono" id="outlineStat">127 strokes &middot; 465 points</span>
-    </div>
-  </section>
-
-  <section class="study" id="study-two">
-    <div class="study-head">
-      <span class="study-no">Study II</span>
-      <h2 class="study-title">The generative recreation</h2>
-    </div>
-    <p class="study-note">The recovered outline becomes a cage. Inside the silhouette,
-    <strong>3,200 wire-fur strokes</strong> grow along a flow field &mdash; no two coats alike.
-    Move your cursor like a lantern across the fur. The eye keeps its ember.</p>
+    <p class="study-note">The background, the color, the grain &mdash; that's the generative part.
+    Reload the page or press the button: same dog, new view. The eye keeps its ember.</p>
     <div class="stage">
-      <canvas id="beastCanvas" width="880" height="880" aria-label="Generative wire-furred dog"></canvas>
+      <canvas id="pieceCanvas" width="880" height="880" aria-label="Wirefang: a code-traced dog outline on a generative background"></canvas>
     </div>
     <div class="controls">
-      <button class="act" id="regenBtn" type="button">Regenerate the coat</button>
+      <button class="act" id="viewBtn" type="button">Deal a new view</button>
       <span class="seedline mono" id="seedLine"></span>
     </div>
   </section>
@@ -152,7 +133,7 @@ footer.colo a:hover { color: var(--gold); }
       <span class="study-no">Reference</span>
       <h2 class="study-title">The 2019 originals</h2>
     </div>
-    <p class="study-note">Kept as found, renamed. One drawing, six colorings &mdash; the lineage this piece continues.</p>
+    <p class="study-note">Kept as found, renamed. One drawing, six colorings &mdash; the lineage every new view is dealt from.</p>
     <div class="ref-grid">
       <figure><img src="reference/wirefang-reference-01.png" alt="Wirefang reference: raw black line art on white" loading="lazy"><figcaption>Raw line art</figcaption></figure>
       <figure><img src="reference/wirefang-reference-02.png" alt="Wirefang reference: amber colorized version" loading="lazy"><figcaption>Amber colorize</figcaption></figure>
@@ -188,77 +169,16 @@ var OUTLINE={"w":768,"h":768,"lines":[[[0.4727,0.1497],[0.4818,0.1471],[0.5273,0
     };
   }
 
+  var W = 880, H = 880;
   var LINES = OUTLINE.lines.map(function (ln) {
-    return ln.map(function (p) { return [p[0] * 880, p[1] * 880]; });
+    return ln.map(function (p) { return [p[0] * W, p[1] * H]; });
   });
-  // longest strokes first: the pen draws the big shapes, then the details
   LINES.sort(function (a, b) {
     function len(l) { var s = 0; for (var i = 1; i < l.length; i++) s += Math.hypot(l[i][0]-l[i-1][0], l[i][1]-l[i-1][1]); return s; }
     return len(b) - len(a);
   });
 
-  /* ---------- Study I: the outline draws itself ---------- */
-  var oc = document.getElementById("outlineCanvas");
-  var octx = oc.getContext("2d");
-  var SEG_PER_FRAME = 3;
-  var drawState = null;
-
-  function startOutline() {
-    octx.fillStyle = "#f4f1e8";
-    octx.fillRect(0, 0, 880, 880);
-    octx.strokeStyle = "#1b1815";
-    octx.lineWidth = 2.6;
-    octx.lineCap = "round";
-    octx.lineJoin = "round";
-    drawState = { li: 0, pi: 1, acc: 0 };
-    if (reduced) { // draw it all at once
-      drawAll();
-      drawState = null;
-    } else {
-      requestAnimationFrame(stepOutline);
-    }
-  }
-  function drawAll() {
-    octx.beginPath();
-    LINES.forEach(function (ln) {
-      octx.moveTo(ln[0][0], ln[0][1]);
-      for (var i = 1; i < ln.length; i++) octx.lineTo(ln[i][0], ln[i][1]);
-    });
-    octx.stroke();
-  }
-  function stepOutline() {
-    if (!drawState) return;
-    var budget = SEG_PER_FRAME;
-    octx.beginPath();
-    while (budget > 0 && drawState.li < LINES.length) {
-      var ln = LINES[drawState.li];
-      var i = drawState.pi;
-      if (i >= ln.length) { drawState.li++; drawState.pi = 1; continue; }
-      octx.moveTo(ln[i-1][0], ln[i-1][1]);
-      octx.lineTo(ln[i][0], ln[i][1]);
-      drawState.pi++;
-      budget--;
-    }
-    octx.stroke();
-    if (drawState.li >= LINES.length) { drawState = null; return; }
-    requestAnimationFrame(stepOutline);
-  }
-  document.getElementById("replayBtn").addEventListener("click", startOutline);
-  startOutline();
-
-  /* ---------- Study II: the generative beast ---------- */
-  var bc = document.getElementById("beastCanvas");
-  var bctx = bc.getContext("2d");
-  var W = 880, H = 880;
-  var FUR = ["#d9a441", "#c47b2d", "#e8c56a", "#8a5a24", "#f0d998", "#b98a3a"];
-  var beast = document.createElement("canvas");
-  beast.width = W; beast.height = H;
-  var b2 = beast.getContext("2d");
-  var maskData = null, maskW = 0, maskH = 0, maskImg = null;
-  var mouse = { x: -9999, y: -9999 };
-  var seed = (Math.random() * 1e9) | 0;
-
-  // find small closed loops (the eye) among the recovered strokes
+  // small closed loops: the eye
   var eyeLoops = [];
   LINES.forEach(function (ln) {
     var minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
@@ -272,147 +192,137 @@ var OUTLINE={"w":768,"h":768,"lines":[[[0.4727,0.1497],[0.4818,0.1471],[0.5273,0
       eyeLoops.push({ cx: (minx + maxx) / 2, cy: (miny + maxy) / 2, r: Math.max(w, h) / 2 });
     }
   });
-  // the eye sits left-of-center, about two-thirds down
   eyeLoops.sort(function (a, b) {
-    var da = Math.hypot(a.cx - W * 0.23, a.cy - H * 0.63);
-    var db = Math.hypot(b.cx - W * 0.23, b.cy - H * 0.63);
-    return da - db;
+    return Math.hypot(a.cx - W*0.23, a.cy - H*0.63) - Math.hypot(b.cx - W*0.23, b.cy - H*0.63);
   });
   var eye = eyeLoops[0] || { cx: W * 0.228, cy: H * 0.631, r: 14 };
 
-  function insideMask(x, y) {
-    if (!maskData) return true;
-    var mx = Math.min(maskW - 1, Math.max(0, (x / W * maskW) | 0));
-    var my = Math.min(maskH - 1, Math.max(0, (y / H * maskH) | 0));
-    return maskData.data[(my * maskW + mx) * 4] > 127;
-  }
+  // palettes dealt from the 2019 lineage
+  var PALETTES = [
+    { name: "Bone",     kind: "wash",    bg: ["#f4f1e8", "#e6ddc8"], ink: "#1b1815", dark: false },
+    { name: "Amber",    kind: "glow",    bg: ["#2e1604", "#c96a1b", "#f2b13d"], ink: "#221105", dark: false },
+    { name: "Inverted", kind: "wash",    bg: ["#101012", "#000000"], ink: "#f2ede2", dark: true },
+    { name: "Rainbow",  kind: "stripes", bg: ["#ff3b1f", "#ff9a1f", "#ffe81f", "#3ddc5f", "#22d3ee", "#a855f7"], ink: "#141414", dark: false },
+    { name: "Ash",      kind: "glow",    bg: ["#f0f0f0", "#8f8f8f", "#232323"], ink: "#0e0e0e", dark: false },
+    { name: "Ember",    kind: "wash",    bg: ["#1c1611", "#0d0b09"], ink: "#f2ddab", dark: true }
+  ];
 
-  function flowAngle(x, y, s) {
-    return 2.1 * Math.sin(x * 0.008 + s) + 1.2 * Math.cos(y * 0.011 - s * 0.7)
-         + 0.7 * Math.sin((x + y) * 0.005 + s * 1.3);
-  }
+  var cv = document.getElementById("pieceCanvas");
+  var ctx = cv.getContext("2d");
+  var seed = (Math.random() * 1e9) | 0;
 
-  function growCoat(s) {
-    var rng = mulberry32(s);
-    var g = b2;
-    // backdrop
-    var bg = g.createRadialGradient(W/2, H/2, 60, W/2, H/2, W*0.75);
-    bg.addColorStop(0, "#1b1611");
-    bg.addColorStop(1, "#0e0c0a");
-    g.fillStyle = bg;
-    g.fillRect(0, 0, W, H);
-    // silhouette body: stamp the mask, tinted warm dark
-    if (maskImg) {
-      var sil = document.createElement("canvas");
-      sil.width = W; sil.height = H;
-      var sctx = sil.getContext("2d");
-      sctx.drawImage(maskImg, 0, 0, W, H);
-      sctx.globalCompositeOperation = "source-in";
-      sctx.fillStyle = "#282014";
-      sctx.fillRect(0, 0, W, H);
-      g.drawImage(sil, 0, 0);
+  function paintBackground(g, pal, rng) {
+    if (pal.kind === "stripes") {
+      var cols = pal.bg.slice();
+      // shuffle stripe order per view
+      for (var i = cols.length - 1; i > 0; i--) {
+        var j = (rng() * (i + 1)) | 0, t = cols[i]; cols[i] = cols[j]; cols[j] = t;
+      }
+      var y = 0, k = 0;
+      while (y < H) {
+        var h = H * (0.08 + rng() * 0.16);
+        g.fillStyle = cols[k % cols.length];
+        g.fillRect(0, y, W, h + 1);
+        y += h; k++;
+      }
+    } else if (pal.kind === "glow") {
+      var cx = W * (0.3 + rng() * 0.4), cy = H * (0.3 + rng() * 0.4);
+      var gr = g.createRadialGradient(cx, cy, 40, cx, cy, W * 0.75);
+      gr.addColorStop(0, pal.bg[pal.bg.length - 1]);
+      gr.addColorStop(0.55, pal.bg[1] || pal.bg[0]);
+      gr.addColorStop(1, pal.bg[0]);
+      g.fillStyle = gr;
+      g.fillRect(0, 0, W, H);
+    } else {
+      var ang = rng() * Math.PI * 2;
+      var x0 = W/2 - Math.cos(ang) * W/2, y0 = H/2 - Math.sin(ang) * H/2;
+      var x1 = W/2 + Math.cos(ang) * W/2, y1 = H/2 + Math.sin(ang) * H/2;
+      var lg = g.createLinearGradient(x0, y0, x1, y1);
+      lg.addColorStop(0, pal.bg[0]);
+      lg.addColorStop(1, pal.bg[pal.bg.length - 1]);
+      g.fillStyle = lg;
+      g.fillRect(0, 0, W, H);
     }
-    // fur
-    var N = 3200;
-    g.lineCap = "round";
-    for (var i = 0; i < N; i++) {
-      var x = rng() * W, y = rng() * H;
-      if (!insideMask(x, y)) continue;
-      var a = flowAngle(x, y, s * 0.0001) + (rng() - 0.5) * 1.1;
-      var len = 5 + rng() * 12;
-      var ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len;
-      var mxp = (x + ex) / 2 + Math.cos(a + 1.5708) * (rng() - 0.5) * 7;
-      var myp = (y + ey) / 2 + Math.sin(a + 1.5708) * (rng() - 0.5) * 7;
-      var dark = rng() < 0.12;
-      g.strokeStyle = dark ? "rgba(10,8,6,0.55)"
-        : FUR[(rng() * FUR.length) | 0];
-      g.globalAlpha = dark ? 0.5 : 0.16 + rng() * 0.42;
-      g.lineWidth = 1 + rng() * 1.5;
-      g.beginPath();
-      g.moveTo(x, y);
-      g.quadraticCurveTo(mxp, myp, ex, ey);
-      g.stroke();
+    // grain
+    var n = 900 + ((rng() * 900) | 0);
+    g.fillStyle = pal.dark ? "rgba(255,240,210,1)" : "rgba(20,12,6,1)";
+    for (var s = 0; s < n; s++) {
+      g.globalAlpha = 0.02 + rng() * 0.05;
+      var sz = 1 + rng() * 2.2;
+      g.fillRect(rng() * W, rng() * H, sz, sz);
     }
     g.globalAlpha = 1;
-    // the hot-wire outline over the fur
-    g.strokeStyle = "rgba(242,221,171,0.85)";
-    g.lineWidth = 1.6;
-    g.lineJoin = "round";
+    // vignette
+    var vg = g.createRadialGradient(W/2, H/2, W*0.28, W/2, H/2, W*0.74);
+    vg.addColorStop(0, "rgba(0,0,0,0)");
+    vg.addColorStop(1, pal.dark ? "rgba(0,0,0,0.5)" : "rgba(20,10,4,0.38)");
+    g.fillStyle = vg;
+    g.fillRect(0, 0, W, H);
+  }
+
+  function strokeOutline(g, pal, progress) {
+    g.strokeStyle = pal.ink;
+    g.lineWidth = pal.dark ? 2.0 : 2.6;
     g.lineCap = "round";
+    g.lineJoin = "round";
+    g.globalAlpha = 0.92;
+    var total = LINES.length;
+    var upto = Math.max(1, Math.floor(total * progress));
     g.beginPath();
-    LINES.forEach(function (ln) {
+    for (var i = 0; i < upto; i++) {
+      var ln = LINES[i];
       g.moveTo(ln[0][0], ln[0][1]);
       for (var k = 1; k < ln.length; k++) g.lineTo(ln[k][0], ln[k][1]);
-    });
+    }
     g.stroke();
-    // ember eye loops
-    g.strokeStyle = "rgba(255,138,61,0.9)";
-    g.lineWidth = 2.2;
-    eyeLoops.slice(0, 3).forEach(function (e) {
+    g.globalAlpha = 1;
+    if (progress >= 1) {
+      // ember eye: ring + glow
+      g.strokeStyle = "rgba(255,138,61,0.92)";
+      g.lineWidth = 2.4;
+      eyeLoops.slice(0, 3).forEach(function (e) {
+        g.beginPath();
+        g.arc(e.cx, e.cy, Math.max(4, e.r), 0, 6.2832);
+        g.stroke();
+      });
+      var gr = g.createRadialGradient(eye.cx, eye.cy, 1, eye.cx, eye.cy, 52);
+      gr.addColorStop(0, "rgba(255,140,60,0.55)");
+      gr.addColorStop(0.4, "rgba(255,110,40,0.22)");
+      gr.addColorStop(1, "rgba(255,110,40,0)");
+      g.fillStyle = gr;
       g.beginPath();
-      g.arc(e.cx, e.cy, Math.max(4, e.r), 0, 6.2832);
-      g.stroke();
-    });
-    document.getElementById("seedLine").textContent = "seed " + s.toString(16);
-  }
-
-  // tint the mask into the silhouette: draw mask, then multiply warm tone through it
-  function paintSilhouette() {
-    var img = new Image();
-    img.onload = function () {
-      maskImg = img;
-      var mc = document.createElement("canvas");
-      mc.width = 192; mc.height = 192;
-      var mctx = mc.getContext("2d", { willReadFrequently: true });
-      mctx.drawImage(img, 0, 0);
-      var d = mctx.getImageData(0, 0, 192, 192);
-      maskData = d; maskW = 192; maskH = 192;
-      growCoat(seed);
-      if (!reduced) requestAnimationFrame(frame);
-      else paintFrame(0);
-    };
-    img.src = "mask.png";
-  }
-
-  function paintFrame(t) {
-    bctx.drawImage(beast, 0, 0);
-    // ember pulse
-    var pulse = 0.5 + 0.5 * Math.sin(t * 0.0022);
-    var gr = bctx.createRadialGradient(eye.cx, eye.cy, 1, eye.cx, eye.cy, 46);
-    gr.addColorStop(0, "rgba(255,140,60," + (0.5 + 0.25 * pulse).toFixed(3) + ")");
-    gr.addColorStop(0.4, "rgba(255,110,40," + (0.22 + 0.12 * pulse).toFixed(3) + ")");
-    gr.addColorStop(1, "rgba(255,110,40,0)");
-    bctx.fillStyle = gr;
-    bctx.beginPath();
-    bctx.arc(eye.cx, eye.cy, 46, 0, 6.2832);
-    bctx.fill();
-    // lantern light follows the cursor
-    if (mouse.x > -100) {
-      var lr = bctx.createRadialGradient(mouse.x, mouse.y, 10, mouse.x, mouse.y, 240);
-      lr.addColorStop(0, "rgba(255,205,130,0.10)");
-      lr.addColorStop(1, "rgba(255,205,130,0)");
-      bctx.fillStyle = lr;
-      bctx.fillRect(0, 0, W, H);
+      g.arc(eye.cx, eye.cy, 52, 0, 6.2832);
+      g.fill();
     }
   }
-  function frame(t) {
-    paintFrame(t || 0);
-    requestAnimationFrame(frame);
+
+  var anim = null;
+  function dealView(newSeed) {
+    if (anim) cancelAnimationFrame(anim);
+    seed = (newSeed === undefined) ? ((Math.random() * 1e9) | 0) : newSeed;
+    var rng = mulberry32(seed);
+    var pal = PALETTES[(rng() * PALETTES.length) | 0];
+    paintBackground(ctx, pal, rng);
+    document.getElementById("seedLine").textContent =
+      "№ " + seed.toString(16) + " · " + pal.name;
+    if (reduced) { strokeOutline(ctx, pal, 1); return; }
+    var t0 = performance.now(), dur = 1400;
+    // repaint bg each frame so the outline draws over a fresh field
+    var bgSnap = document.createElement("canvas");
+    bgSnap.width = W; bgSnap.height = H;
+    bgSnap.getContext("2d").drawImage(cv, 0, 0);
+    function frame(t) {
+      var p = Math.min(1, (t - t0) / dur);
+      ctx.drawImage(bgSnap, 0, 0);
+      strokeOutline(ctx, pal, p);
+      if (p < 1) anim = requestAnimationFrame(frame);
+      else anim = null;
+    }
+    anim = requestAnimationFrame(frame);
   }
 
-  bc.addEventListener("pointermove", function (ev) {
-    var r = bc.getBoundingClientRect();
-    mouse.x = (ev.clientX - r.left) / r.width * W;
-    mouse.y = (ev.clientY - r.top) / r.height * H;
-  });
-  bc.addEventListener("pointerleave", function () { mouse.x = -9999; mouse.y = -9999; });
-  document.getElementById("regenBtn").addEventListener("click", function () {
-    seed = (Math.random() * 1e9) | 0;
-    growCoat(seed);
-    if (reduced) paintFrame(0);
-  });
-
-  paintSilhouette();
+  document.getElementById("viewBtn").addEventListener("click", function () { dealView(); });
+  dealView(seed);
 })();
 </script>
 </body>
