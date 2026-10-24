@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Flip · Creative Experiments</title>
+<meta name="description" content="An endless kineograph: a hand-drawn flipbook you turn with your thumb. Every page turn makes its own paper sound, synthesized live — no audio files.">
+<meta name="theme-color" content="#191512">
+<style>
+  @font-face {
+    font-family: 'Fraunces'; font-style: normal; font-weight: 600; font-display: swap;
+    src: url('../assets/fonts/Fraunces-600.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Plex Mono'; font-style: normal; font-weight: 400; font-display: swap;
+    src: url('../assets/fonts/IBMPlexMono-400.woff2') format('woff2');
+  }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #191512; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  .ui { position: fixed; z-index: 3; color: #e9dfca; font-family: 'Plex Mono', monospace; }
+  .back { top: 18px; left: 20px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+  .back a { color: inherit; text-decoration: none; opacity: .75; }
+  .back a:hover { opacity: 1; }
+  .cap { left: 20px; bottom: 18px; pointer-events: none; }
+  .cap h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 22px; margin: 0 0 4px; letter-spacing: .01em; }
+  .cap p { margin: 0; font-size: 12px; opacity: .72; max-width: 360px; line-height: 1.5; }
+  .colo { right: 20px; bottom: 18px; font-size: 12px; opacity: .75; pointer-events: none; }
+  .colo a { color: inherit; }
+  @media (max-width: 560px) { .cap p { display: none; } .cap h1 { font-size: 19px; } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="ui back"><a href="../">&larr; Creative Experiments</a></div>
+<div class="ui cap">
+  <h1>Paper Flip</h1>
+  <p>An endless kineograph, after Linnett's 1868 "moving picture" booklet. Drag the right edge to turn a page; flick to riffle. The paper sound is synthesized live for every page — no audio files.</p>
+</div>
+<div class="ui colo">Kept by Hans &middot; <a href="https://github.com/builtbysai/creative-experiments/tree/main/paper-flip">source</a></div>
+<script>
+(function () {
+  "use strict";
+
+  // PAPER FLIP — an endless flipbook.
+  // The film: a seed sprouts, flowers, drops a seed. 72 pages, drawn in
+  // blue-black ink with a hand-drawn boil (every page's lines jitter by
+  // its own seed, so flipping makes the drawing tremble like real paper
+  // animation).
+  // The sound: what a page actually does — it whooshes (air displaced,
+  // a band of noise that brightens as the page peaks) and it snaps
+  // (a short papery crackle as it springs free), over a soft body thump.
+  // All synthesized with WebAudio at the moment of the flip. No files.
+
+  var FRAMES = 72;
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  var W = 0, H = 0, DPR = 1;
+  var book = { x: 0, y: 0, w: 0, h: 0 };
+  var page = 0;                 // current page index (frame = page % FRAMES)
+  var flips = [];               // active page turns {dir, p, from, to, t0, dur, controlled}
+  var drag = null;              // {startX, lastX, lastT, vel, side, p}
+  var lastInteract = 0;
+  var freeze = null;            // ?frame=N&flip=P screenshot hooks
+
+  var qs = new URLSearchParams(location.search);
+  if (qs.get('frame') !== null) {
+    page = parseInt(qs.get('frame'), 10) || 0;
+    freeze = { flip: parseFloat(qs.get('flip') || '0') };
+  }
+
+  function mulberry(s) {
+    var a = s >>> 0;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+
+  // ---------------- audio: the sound a page makes ----------------
+  var AC = null, master = null, noiseBuf = null;
+  function audioInit() {
+    if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+    try {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      master = AC.createGain();
+      master.gain.value = 0.55;
+      master.connect(AC.destination);
+      var len = AC.sampleRate;
+      noiseBuf = AC.createBuffer(1, len, AC.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    } catch (e) { AC = null; }
+  }
+  var lastFlipSound = 0;
+  function flipSound(vel) {
+    if (!AC || !noiseBuf) return;
+    var now = AC.currentTime;
+    if (now - lastFlipSound < 0.028) return;   // a riffle is a stream, not a stack
+    lastFlipSound = now;
+    var v = clamp(vel, 0.15, 1.4);
+    // whoosh: noise through a bandpass that brightens as the page peaks
+    var src = AC.createBufferSource();
+    src.buffer = noiseBuf;
+    src.playbackRate.value = 0.9 + Math.random() * 0.25;
+    var bp = AC.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 0.85;
+    bp.frequency.setValueAtTime(520 + v * 260, now);
+    bp.frequency.exponentialRampToValueAtTime(2300 + v * 700, now + 0.055 + v * 0.02);
+    bp.frequency.exponentialRampToValueAtTime(840, now + 0.16 + v * 0.05);
+    var g = AC.createGain();
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.34 + v * 0.22, now + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.17 + v * 0.05);
+    src.connect(bp); bp.connect(g); g.connect(master);
+    src.start(now, Math.random() * 0.5);
+    src.stop(now + 0.3);
+    // body: a soft low thump under the snap
+    var osc = AC.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.exponentialRampToValueAtTime(68, now + 0.07);
+    var og = AC.createGain();
+    og.gain.setValueAtTime(0.10, now);
+    og.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+    osc.connect(og); og.connect(master);
+    osc.start(now); osc.stop(now + 0.1);
+    // crackle: two or three papery micro-bursts inside the sweep
+    var n = 2 + (Math.random() * 2 | 0);
+    for (var i = 0; i < n; i++) {
+      var t0 = now + 0.02 + Math.random() * 0.09;
+      var cs = AC.createBufferSource();
+      cs.buffer = noiseBuf;
+      var hp = AC.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 3200;
+      var cg = AC.createGain();
+      cg.gain.setValueAtTime(0.05 + Math.random() * 0.05, t0);
+      cg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.016);
+      cs.connect(hp); hp.connect(cg); cg.connect(master);
+      cs.start(t0, Math.random() * 0.5);
+      cs.stop(t0 + 0.03);
+    }
+  }
+
+  // ---------------- the film, drawn in ink ----------------
+  function drawFilm(g, frameIdx, ox, oy, pw, ph, mirror, alpha) {
+    var fidx = ((frameIdx % FRAMES) + FRAMES) % FRAMES;
+    var rg = mulberry(7000 + fidx * 131);
+    var t = fidx / FRAMES;
+    g.save();
+    if (mirror) { g.translate(ox + pw, oy); g.scale(-1, 1); }
+    else g.translate(ox, oy);
+    g.globalAlpha = alpha;
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    var INK = '#26334d';
+    function J(v) { return (rg() - 0.5) * 2 * v; }
+    function line(x1, y1, x2, y2, wdt, col) {
+      g.strokeStyle = col || INK;
+      g.lineWidth = wdt;
+      g.beginPath();
+      g.moveTo(x1 * pw + J(1.1), y1 * ph + J(1.1));
+      g.lineTo(x2 * pw + J(1.1), y2 * ph + J(1.1));
+      g.stroke();
+    }
+    function curve(pts, wdt, col) {
+      g.strokeStyle = col || INK;
+      g.lineWidth = wdt;
+      g.beginPath();
+      g.moveTo(pts[0][0] * pw + J(1.1), pts[0][1] * ph + J(1.1));
+      for (var i = 1; i < pts.length - 1; i++) {
+        var xc = (pts[i][0] + pts[i + 1][0]) / 2, yc = (pts[i][1] + pts[i + 1][1]) / 2;
+        g.quadraticCurveTo(pts[i][0] * pw + J(1.1), pts[i][1] * ph + J(1.1), xc * pw, yc * ph);
+      }
+      var lp = pts[pts.length - 1];
+      g.lineTo(lp[0] * pw + J(1.1), lp[1] * ph + J(1.1));
+      g.stroke();
+    }
+    var groundY = 0.80, cx = 0.5;
+    // ground
+    line(0.16, groundY, 0.84, groundY, 2, INK);
+    for (var gi = 0; gi < 9; gi++) {
+      var gx = 0.2 + rg() * 0.6;
+      line(gx, groundY, gx + 0.012, groundY - 0.014, 1.2, INK);
+    }
+    // growth phases
+    var sprout = clamp((t - 0.06) / 0.26, 0, 1);          // stem rises
+    var bloom = clamp((t - 0.52) / 0.22, 0, 1);           // flower opens
+    var fall = clamp((t - 0.80) / 0.16, 0, 1);            // seed falls
+    var stemH = 0.46 * ease(sprout);
+    var bend = 0.05 * Math.sin(t * 6.283) + 0.10 * ease(clamp((t - 0.74) / 0.14, 0, 1));
+    var topX = cx + bend, topY = groundY - stemH;
+    if (t > 0.02 && fall < 1) {
+      // stem
+      curve([[cx, groundY], [cx + bend * 0.3, groundY - stemH * 0.5], [topX, topY]], 2.6, INK);
+      // leaves unfurl
+      var leafOpen = ease(clamp((t - 0.16) / 0.2, 0, 1));
+      if (leafOpen > 0) {
+        var ly = groundY - stemH * 0.42;
+        for (var s = -1; s <= 1; s += 2) {
+          var la = s * (0.5 + 0.65 * leafOpen);
+          var llen = 0.085 * leafOpen;
+          var lx2 = cx + bend * 0.2 + Math.sin(la) * llen * 1.6;
+          var ly2 = ly - Math.cos(la) * llen * 0.55;
+          curve([[cx + bend * 0.2, ly], [(cx + lx2) / 2 + s * 0.012, (ly + ly2) / 2 - 0.012], [lx2, ly2]], 1.8, INK);
+          g.fillStyle = 'rgba(74,122,72,0.20)';
+          g.beginPath();
+          g.ellipse(((cx + lx2) / 2) * pw, ((ly + ly2) / 2) * ph, llen * pw * 0.30, llen * pw * 0.13, s * 0.6, 0, 6.283);
+          g.fill();
+        }
+      }
+      // bud, then flower
+      if (bloom <= 0) {
+        g.fillStyle = INK;
+        g.beginPath();
+        g.ellipse(topX * pw, topY * ph, 0.016 * pw, 0.024 * pw, bend * 2, 0, 6.283);
+        g.fill();
+      } else {
+        var petalN = 6;
+        for (var pi = 0; pi < petalN; pi++) {
+          var pa = (pi / petalN) * 6.283 + 0.4;
+          var pl = 0.052 * ease(bloom);
+          var px2 = topX + Math.cos(pa) * pl * 1.35;
+          var py2 = topY + Math.sin(pa) * pl * 0.95;
+          g.fillStyle = 'rgba(178,58,72,0.28)';
+          g.beginPath();
+          g.ellipse(lerp(topX, px2, 0.62) * pw, lerp(topY, py2, 0.62) * ph, pl * pw * 0.52, pl * pw * 0.24, pa, 0, 6.283);
+          g.fill();
+          g.strokeStyle = INK;
+          g.lineWidth = 1.6;
+          g.stroke();
+        }
+        g.fillStyle = '#d9a441';
+        g.beginPath();
+        g.arc(topX * pw, topY * ph, 0.014 * pw, 0, 6.283);
+        g.fill();
+        g.strokeStyle = INK;
+        g.lineWidth = 1.4;
+        g.stroke();
+        // one petal lets go near the end
+        if (t > 0.76) {
+          var pt = clamp((t - 0.76) / 0.2, 0, 1);
+          var fpx = topX + 0.05 + pt * 0.07, fpy = topY + pt * pt * (groundY - topY - 0.03);
+          g.fillStyle = 'rgba(178,58,72,0.35)';
+          g.beginPath();
+          g.ellipse(fpx * pw, fpy * ph, 0.02 * pw, 0.009 * pw, pt * 2.4, 0, 6.283);
+          g.fill();
+        }
+      }
+    }
+    // the seed: resting at the start, falling at the end
+    if (fall > 0 && fall < 1) {
+      var sy = lerp(topY, groundY - 0.012, fall * fall);
+      g.fillStyle = INK;
+      g.beginPath();
+      g.ellipse(topX * pw, sy * ph, 0.009 * pw, 0.013 * pw, 0.3, 0, 6.283);
+      g.fill();
+    } else if (t <= 0.80 || fall >= 1) {
+      g.fillStyle = INK;
+      g.beginPath();
+      g.ellipse(cx * pw, (groundY - 0.010) * ph, 0.009 * pw, 0.012 * pw, 0.3, 0, 6.283);
+      g.fill();
+    }
+    // page number, pencilled
+    g.fillStyle = 'rgba(38,51,77,0.55)';
+    g.font = Math.round(ph * 0.035) + 'px "Plex Mono", monospace';
+    g.textAlign = 'right';
+    g.fillText(String(fidx + 1), pw * 0.94, ph * 0.95);
+    g.restore();
+  }
+
+  // ---------------- the book ----------------
+  function paperTexture(g, x, y, w, h, seedN) {
+    var rg = mulberry(seedN);
+    for (var i = 0; i < 90; i++) {
+      g.fillStyle = rg() > 0.5 ? 'rgba(120,96,60,0.05)' : 'rgba(255,255,255,0.05)';
+      g.fillRect(x + rg() * w, y + rg() * h, 1.4, 1.4);
+    }
+  }
+  function drawPage(g, frameIdx, x, y, w, h) {
+    g.fillStyle = '#f4ecd9';
+    g.fillRect(x, y, w, h);
+    paperTexture(g, x, y, w, h, 40 + frameIdx);
+    drawFilm(g, frameIdx, x + w * 0.06, y + h * 0.06, w * 0.88, h * 0.88, false, 1);
+  }
+  // a page in mid-turn around the LEFT spine: p 0 = flat on the stack,
+  // p 1 = flipped over to the back. The sheet slips behind the book at
+  // both ends of the turn, so it fades in and out there.
+  function drawTurning(g, frameIdx, p, dir, content) {
+    var bx = book.x, by = book.y, bw = book.w, bh = book.h;
+    var ang = p * Math.PI;
+    var reach = Math.cos(ang);
+    var lift = Math.sin(ang);
+    var freeX = bx + bw * (0.5 + 0.5 * reach);
+    var curl = bw * 0.16 * lift;
+    var topFreeY = by - lift * bh * 0.012;
+    var botFreeY = by + bh + lift * bh * 0.012;
+    var fade = p > 0.86 ? (1 - p) / 0.14 : 1;   // slips behind the stack
+    // shadow cast on the page beneath
+    g.fillStyle = 'rgba(20,12,6,' + (0.20 * lift + 0.05) + ')';
+    g.beginPath();
+    g.ellipse(bx + bw / 2 + (freeX - bx - bw / 2) * 0.4, by + bh * 1.02, bw * 0.42, bh * 0.05, 0, 0, 6.283);
+    g.fill();
+    var spineX = bx;
+    var bendX = lerp(spineX, freeX, 0.55);
+    var shade = 1 - 0.28 * lift;
+    var backSide = p > 0.5;
+    g.save();
+    g.globalAlpha = clamp(fade, 0, 1);
+    g.beginPath();
+    g.moveTo(spineX, by);
+    g.quadraticCurveTo(bendX, by - lift * bh * 0.045, freeX, topFreeY);
+    g.quadraticCurveTo(freeX + curl * 0.30, by + bh / 2, freeX, botFreeY);
+    g.quadraticCurveTo(bendX, by + bh + lift * bh * 0.045, spineX, by + bh);
+    g.closePath();
+    var grad = g.createLinearGradient(spineX, 0, freeX, 0);
+    var base = backSide ? [238, 229, 205] : [244, 236, 217];
+    grad.addColorStop(0, 'rgb(' + (base[0] * shade | 0) + ',' + (base[1] * shade | 0) + ',' + (base[2] * shade | 0) + ')');
+    grad.addColorStop(1, 'rgb(' + (base[0] * (shade + 0.10) | 0) + ',' + (base[1] * (shade + 0.10) | 0) + ',' + (base[2] * (shade + 0.10) | 0) + ')');
+    g.fillStyle = grad;
+    g.fill();
+    // the curl itself: a soft shadow trough just inside the free edge,
+    // with a lit ridge on its spine side
+    if (lift > 0.15) {
+      g.save();
+      g.clip();
+      var cg = g.createLinearGradient(freeX - curl * 0.9, 0, freeX + curl * 0.25, 0);
+      cg.addColorStop(0, 'rgba(60,45,25,0)');
+      cg.addColorStop(0.62, 'rgba(60,45,25,' + (0.16 * lift) + ')');
+      cg.addColorStop(0.8, 'rgba(255,252,240,' + (0.13 * lift) + ')');
+      cg.addColorStop(1, 'rgba(60,45,25,' + (0.10 * lift) + ')');
+      g.fillStyle = cg;
+      g.fillRect(Math.min(spineX, freeX - curl), by - bh * 0.05, Math.abs(freeX - spineX) + curl * 1.3, bh * 1.1);
+      g.restore();
+    }
+    if (content !== false) {
+      g.save();
+      g.clip();
+      if (backSide) {
+        // faint show-through of the drawing, mirrored — paper is thin
+        drawFilm(g, frameIdx, bx + bw * 0.06, by + bh * 0.06, bw * 0.88, bh * 0.88, true, 0.16);
+      } else {
+        // the drawing squashes with the sheet as it turns (foreshortening)
+        var sx = Math.max(0.05, (freeX - spineX) / bw);
+        g.translate(spineX, 0);
+        g.scale(sx, 1);
+        g.translate(-spineX, 0);
+        drawFilm(g, frameIdx, bx + bw * 0.06, by + bh * 0.06, bw * 0.88, bh * 0.88, false, 1);
+      }
+      g.restore();
+    }
+    g.restore();
+  }
+
+  function draw(now) {
+    // desk
+    var dg = ctx.createRadialGradient(W / 2, H * 0.42, 0, W / 2, H * 0.42, Math.max(W, H) * 0.75);
+    dg.addColorStop(0, '#2a211a');
+    dg.addColorStop(0.6, '#1d1712');
+    dg.addColorStop(1, '#120e0b');
+    ctx.fillStyle = dg;
+    ctx.fillRect(0, 0, W, H);
+    var bx = book.x, by = book.y, bw = book.w, bh = book.h;
+    // book shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath();
+    ctx.ellipse(bx + bw / 2 + 6, by + bh + 10, bw * 0.52, bh * 0.07, 0, 0, 6.283);
+    ctx.fill();
+    // page block: the springy stack, edges visible on the right and bottom
+    ctx.fillStyle = '#ddd2b8';
+    ctx.fillRect(bx + 5, by + 6, bw, bh);
+    ctx.fillStyle = '#e9e0c8';
+    ctx.fillRect(bx + 3, by + 3, bw, bh);
+    ctx.strokeStyle = 'rgba(120,100,70,0.35)';
+    ctx.lineWidth = 1;
+    for (var ei = 0; ei < 5; ei++) {
+      ctx.beginPath();
+      ctx.moveTo(bx + 3 + ei, by + 3 + bh);
+      ctx.lineTo(bx + 3 + ei + bw, by + 3 + bh);
+      ctx.stroke();
+    }
+    // what lies beneath a turning sheet is always the next sheet's front
+    var topFlip = flips.length ? flips[flips.length - 1] : null;
+    if (freeze && freeze.flip > 0) {
+      drawPage(ctx, page + 1, bx, by, bw, bh);
+      drawTurning(ctx, page, freeze.flip, 1);
+    } else if (topFlip) {
+      drawPage(ctx, topFlip.frameRaw + 1, bx, by, bw, bh);
+      for (var fi = 0; fi < flips.length; fi++) {
+        drawTurning(ctx, flips[fi].frameRaw, flips[fi].p, flips[fi].dir);
+      }
+    } else {
+      drawPage(ctx, page, bx, by, bw, bh);
+      // idle: just the top corner breathes, asking for a thumb
+      if (!freeze && now - lastInteract > 2600) {
+        var k = 12 + (Math.sin(now / 900) * 0.5 + 0.5) * 16;
+        ctx.fillStyle = 'rgba(20,12,6,0.18)';
+        ctx.beginPath();
+        ctx.moveTo(bx + bw - k * 1.15, by + 2);
+        ctx.lineTo(bx + bw, by + k * 1.15);
+        ctx.lineTo(bx + bw, by + 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#e7dcc2';
+        ctx.beginPath();
+        ctx.moveTo(bx + bw - k, by);
+        ctx.lineTo(bx + bw, by + k);
+        ctx.lineTo(bx + bw, by);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    // binding: two staples down the left edge
+    ctx.fillStyle = '#8a8378';
+    for (var si = 0; si < 2; si++) {
+      var sy2 = by + bh * (si ? 0.78 : 0.22);
+      ctx.fillRect(bx - 2, sy2 - 7, 7, 3);
+      ctx.fillRect(bx - 2, sy2 + 4, 7, 3);
+    }
+    // hint, fading after first flips
+    if (page === 0 && flips.length === 0 && !freeze) {
+      ctx.fillStyle = 'rgba(233,223,202,0.6)';
+      ctx.font = Math.round(Math.min(W, H) * 0.028) + 'px "Plex Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('drag the right edge →', bx + bw / 2, by + bh + Math.min(W, H) * 0.075);
+    }
+  }
+
+  // ---------------- flipping ----------------
+  // Every turn is a from→to tween of p (0 = flat on the stack, 1 = over
+  // the spine). Forward turns go 0→1, backward turns 1→0.
+  function startFlip(dir, dur, vel) {
+    var frameRaw = dir > 0 ? page : page - 1;
+    flips.push({
+      dir: dir, frameRaw: frameRaw,
+      from: dir > 0 ? 0 : 1, to: dir > 0 ? 1 : 0, p: dir > 0 ? 0 : 1,
+      t0: performance.now(), dur: dur, vel: vel, sounded: false, controlled: false
+    });
+    if (dir > 0) page++;
+    else page--;
+  }
+  function riffle(dir, count, vel) {
+    var n = clamp(count, 1, 16);
+    for (var i = 0; i < n; i++) {
+      (function (k) {
+        setTimeout(function () { startFlip(dir, 130, vel); }, k * 62);
+      })(i);
+    }
+  }
+
+  // ---------------- input: the thumb ----------------
+  function pos(e) { return { x: e.clientX, y: e.clientY }; }
+  canvas.addEventListener('pointerdown', function (e) {
+    audioInit();
+    lastInteract = performance.now();
+    var p = pos(e);
+    var side = p.x > book.x + book.w * 0.45 ? 1 : -1;
+    drag = { side: side, startX: p.x, rel0: (p.x - book.x) / book.w, lastX: p.x, lastT: performance.now(), vel: 0, moved: 0, flip: null };
+    canvas.setPointerCapture(e.pointerId);
+    if (side > 0) {
+      // grab the page: a controlled flip follows the thumb
+      var f = { dir: 1, frameRaw: page, p: 0, controlled: true, sounded: false, vel: 0.5 };
+      flips.push(f);
+      drag.flip = f;
+      page++;
+    } else {
+      var f2 = { dir: -1, frameRaw: page - 1, p: 1, controlled: true, sounded: false, vel: 0.5 };
+      flips.push(f2);
+      drag.flip = f2;
+      page--;
+    }
+    drag.flip.p0 = drag.flip.p;
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    var p = pos(e);
+    var now = performance.now();
+    var dx = p.x - drag.lastX;
+    drag.vel = 0.7 * drag.vel + 0.3 * Math.abs(dx) / Math.max(1, now - drag.lastT) * 3;
+    drag.moved += Math.abs(dx);
+    drag.lastX = p.x;
+    drag.lastT = now;
+    lastInteract = now;
+    if (drag.flip) {
+      var rel = (p.x - book.x) / book.w;
+      // both directions: pulling the thumb toward the spine raises p
+      drag.flip.p = clamp(drag.flip.p0 + (drag.rel0 - rel) * 1.7, 0, 1);
+      if (!drag.flip.sounded && drag.flip.p > 0.5 && drag.side > 0) { drag.flip.sounded = true; flipSound(0.4 + drag.vel); }
+      if (!drag.flip.sounded && drag.flip.p < 0.5 && drag.side < 0) { drag.flip.sounded = true; flipSound(0.4 + drag.vel); }
+    }
+  });
+  function endDrag(e) {
+    if (!drag) return;
+    var d = drag;
+    drag = null;
+    lastInteract = performance.now();
+    var f = d.flip;
+    if (!f) return;
+    var flick = d.vel > 1.15 && d.moved > 60;
+    if (flick) {
+      // the thumb lets go: pages spring free in a riffle
+      var idx = flips.indexOf(f);
+      if (idx >= 0) flips.splice(idx, 1);
+      if (f.dir > 0) page--; else page++;      // hand the grabbed page back to the riffle
+      var extra = Math.round(clamp(d.vel * 5, 3, 13));
+      riffle(f.dir, extra, 0.7 + d.vel * 0.3);
+      return;
+    }
+    f.controlled = false;
+    f.t0 = performance.now();
+    f.from = f.p;
+    f.to = f.dir > 0 ? (f.p > 0.38 ? 1 : 0) : (f.p < 0.62 ? 0 : 1);
+    f.dur = Math.max(60, Math.abs(f.to - f.from) * 300);
+    f.vel = 0.4 + d.vel;
+    if (!f.sounded && f.to !== f.from) {
+      f.sounded = true;
+      flipSound(f.vel);
+    }
+    // if the flip reverses, give the page back
+    if ((f.dir > 0 && f.to === 0) || (f.dir < 0 && f.to === 1)) {
+      if (f.dir > 0) page--; else page++;
+    }
+  }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+  window.addEventListener('keydown', function (e) {
+    audioInit();
+    lastInteract = performance.now();
+    if (e.key === 'ArrowRight') startFlip(1, 260, 0.6);
+    if (e.key === 'ArrowLeft') startFlip(-1, 260, 0.6);
+  });
+
+  function frame(now) {
+    for (var i = flips.length - 1; i >= 0; i--) {
+      var f = flips[i];
+      if (f.controlled) continue;
+      var t = (now - f.t0) / f.dur;
+      if (t >= 1) {
+        f.p = f.to;
+        flips.splice(i, 1);
+      } else {
+        f.p = lerp(f.from, f.to, ease(clamp(t, 0, 1)));
+        if (!f.sounded && ((f.to > f.from && f.p > 0.45) || (f.to < f.from && f.p < 0.55))) {
+          f.sounded = true;
+          flipSound(f.vel);
+        }
+      }
+    }
+    draw(now);
+    requestAnimationFrame(frame);
+  }
+
+  function build() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    var S = Math.min(W, H);
+    book.w = Math.min(W * 0.88, S * 1.06);
+    book.h = book.w * 0.72;
+    if (book.h > H * 0.72) { book.h = H * 0.72; book.w = book.h / 0.72; }
+    book.x = (W - book.w) / 2;
+    book.y = H * 0.47 - book.h / 2;
+    lastInteract = performance.now();
+  }
+  window.addEventListener('resize', build);
+  build();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
