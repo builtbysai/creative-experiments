@@ -53,7 +53,7 @@
   var canvas = document.getElementById('c');
   var ctx = canvas.getContext('2d');
   var W = 0, H = 0, S = 0;
-  var groundCv = null, bodyCv = null, frontCv = null;
+  var groundCv = null, trainCv = null, bodyCv = null, frontCv = null;
   var strands = [];
   var drifters = [];
   var gusts = [];
@@ -160,14 +160,20 @@
       g.fillStyle = sm;
       g.fillRect(wx - wr, wy - wr, wr * 2, wr * 2);
     }
-    // smoke curls: a few open arcs, chalk-like
-    g.strokeStyle = 'rgba(220,232,226,0.045)';
-    for (i = 0; i < 6; i++) {
-      g.lineWidth = 1 + rg() * 1.6;
-      g.beginPath();
-      var ax = rg() * W, ay = rg() * H, ar = 24 + rg() * 90, a0 = rg() * 6.28;
-      g.arc(ax, ay, ar, a0, a0 + 1.2 + rg() * 1.6);
-      g.stroke();
+    // smoke curls: chalk spirals drawn as jittered dashes, the way a
+    // pastel stick actually lays down a curl
+    for (i = 0; i < 7; i++) {
+      var sx = (0.12 + rg() * 0.76) * W, sy = (0.18 + rg() * 0.7) * H;
+      var sr = 16 + rg() * 54, turns = 1.2 + rg() * 0.9, dir = rg() > 0.5 ? 1 : -1;
+      var steps = 90;
+      for (var q = 0; q < steps; q++) {
+        var qt = q / steps, qa = dir * qt * turns * 6.283, qr = sr * (0.25 + 0.75 * qt);
+        var qx = sx + Math.cos(qa) * qr + (rg() - 0.5) * 3, qy = sy + Math.sin(qa) * qr * 0.82 + (rg() - 0.5) * 3;
+        g.fillStyle = 'rgba(220,232,226,' + (0.05 + 0.05 * (1 - qt)) + ')';
+        g.beginPath();
+        g.arc(qx, qy, 1 + rg() * 1.8, 0, 6.283);
+        g.fill();
+      }
     }
 
     // chalk dust
@@ -175,6 +181,18 @@
       g.fillStyle = rg() > 0.6 ? 'rgba(233,223,202,0.06)' : 'rgba(0,0,0,0.10)';
       g.fillRect(rg() * W, rg() * H, 1.3, 1.3);
     }
+
+    // warm key light from upper left, and a vignette to close the corners
+    var key = g.createRadialGradient(W * 0.30, H * 0.16, 0, W * 0.30, H * 0.16, S * 0.95);
+    key.addColorStop(0, 'rgba(255,214,150,0.07)');
+    key.addColorStop(1, 'rgba(255,214,150,0)');
+    g.fillStyle = key;
+    g.fillRect(0, 0, W, H);
+    var vg = g.createRadialGradient(W / 2, H / 2, S * 0.42, W / 2, H / 2, S * 1.05);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.30)');
+    g.fillStyle = vg;
+    g.fillRect(0, 0, W, H);
 
     // the little star flower the bird is looking at
     var L0 = layout();
@@ -195,14 +213,23 @@
       else if (edge < 0.86) { lx = W - Math.pow(rg(), 1.8) * W * 0.10; ly = rg() * H; }
       else { lx = rg() * W; ly = rg() * H; }
       var ls = 13 + rg() * 30;
+      var lw = ls * (rg() > 0.72 ? 0.58 : 0.42);   // some leaves round, most pointed
+      var lrot = rg() * 6.28;
       g.save();
       g.translate(lx + 2, ly + 3);
-      g.rotate(rg() * 6.28);
+      g.rotate(lrot);
       g.globalAlpha = 0.28;
-      leaf(g, ls, ls * 0.42, '#000000', 0);
+      leaf(g, ls, lw, '#000000', 0);
       g.restore();
       g.globalAlpha = 1;
-      drawLeafAt(g, lx, ly, ls, ls * 0.42, rg() * 6.28, AUTUMN[(rg() * AUTUMN.length) | 0], 0.30);
+      // a short stem trailing from the base
+      g.strokeStyle = 'rgba(46,28,14,0.8)';
+      g.lineWidth = 1.3;
+      g.beginPath();
+      g.moveTo(lx, ly);
+      g.lineTo(lx - Math.sin(lrot) * 6, ly + Math.cos(lrot) * 6);
+      g.stroke();
+      drawLeafAt(g, lx, ly, ls, lw, lrot, AUTUMN[(rg() * AUTUMN.length) | 0], 0.30);
     }
   }
 
@@ -223,6 +250,21 @@
     sh.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = sh;
     g.fillRect(bx - rx * 1.5, by + ry * 0.4, rx * 3, ry * 2.4);
+
+    // flame tongues at the tail base, as in the reference: the fan
+    // seems to catch fire where it leaves the body
+    var flameCols = ['#eda63a', '#e07b2a', '#c9501f'];
+    for (var fi = 0; fi < 6; fi++) {
+      var fa = -0.9 + fi * 0.30 + (rg() - 0.5) * 0.12;
+      var fl = rx * (0.55 + rg() * 0.4);
+      g.save();
+      g.translate(bx + rx * 0.66, by - ry * 0.34);
+      g.rotate(fa);
+      g.globalAlpha = 0.85;
+      leaf(g, fl, fl * 0.30, flameCols[fi % 3], 0);
+      g.restore();
+    }
+    g.globalAlpha = 1;
 
     // tail base mound (body colour flowing into the fan)
     g.fillStyle = '#7c4419';
@@ -280,6 +322,39 @@
     }
     g.globalAlpha = 1;
 
+    // the folded wing: buff coverts barred with dark umber waves,
+    // the marking that makes a blue peafowl read as itself
+    g.save();
+    g.beginPath();
+    g.ellipse(bx + rx * 0.28, by - ry * 0.08, rx * 0.52, ry * 0.52, -0.32, 0, 6.283);
+    g.clip();
+    g.fillStyle = '#b98d54';
+    g.fillRect(bx - rx * 0.3, by - ry * 0.7, rx * 1.2, ry * 1.3);
+    g.strokeStyle = 'rgba(43,28,16,0.85)';
+    for (var wi = 0; wi < 6; wi++) {
+      g.lineWidth = 3.2 - wi * 0.3;
+      g.beginPath();
+      var wy = by - ry * 0.52 + wi * ry * 0.21;
+      for (var wx2 = 0; wx2 <= 20; wx2++) {
+        var wpx = bx - rx * 0.2 + (wx2 / 20) * rx * 1.05;
+        var wpy = wy + Math.sin(wx2 * 0.9 + wi * 1.7) * ry * 0.045;
+        if (wx2 === 0) g.moveTo(wpx, wpy); else g.lineTo(wpx, wpy);
+      }
+      g.stroke();
+    }
+    g.restore();
+    // chalk powder over the body, so the bird is pastel, not plastic:
+    // speckles clipped to the body ellipse
+    g.save();
+    g.beginPath();
+    g.ellipse(bx, by, rx, ry, -0.32, 0, 6.283);
+    g.clip();
+    for (var sp = 0; sp < 420; sp++) {
+      g.fillStyle = rg() > 0.5 ? 'rgba(230,242,238,0.05)' : 'rgba(6,20,28,0.06)';
+      g.fillRect(bx + (rg() - 0.5) * rx * 2, by + (rg() - 0.5) * ry * 2, 1.4, 1.4);
+    }
+    g.restore();
+
     // neck: rises from the breast, arches, and bows down to the head,
     // which hangs low over the little star flower
     var neck = [
@@ -308,7 +383,7 @@
       var gt = pi / (path.length - 1);
       var wseg = Math.min(widths.length - 1.001, gt * (widths.length - 1));
       var wdt = lerp(widths[Math.floor(wseg)], widths[Math.floor(wseg) + 1], wseg % 1);
-      g.strokeStyle = lerpColor('#2f9db4', '#175d7c', gt);
+      g.strokeStyle = lerpColor('#2b78d6', '#173f7e', gt);
       g.lineWidth = wdt;
       g.lineCap = 'round';
       g.beginPath();
@@ -430,52 +505,142 @@
     };
   }
 
+  // ---------- the train, baked once: bare shafts, fine barbs, and the
+  // fluffy gold-green coverts at the base. A real train feather is a
+  // long near-naked rachis; the blade and the eye live at the tip.
+  function buildTrain() {
+    trainCv = document.createElement('canvas');
+    trainCv.width = Math.floor(W * DPR); trainCv.height = Math.floor(H * DPR);
+    var g = trainCv.getContext('2d');
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    var rg = mulberry(seed + 41);
+    var bs = Math.max(0.7, S / 620);
+
+    for (var s = 0; s < strands.length; s++) {
+      var st = strands[s];
+      // the rachis: a pale straw-teal line, slightly tapered feel via
+      // two passes (soft under-stroke, brighter core)
+      g.strokeStyle = 'rgba(120,138,104,0.30)';
+      g.lineWidth = 2.1 * bs;
+      g.beginPath();
+      g.moveTo(st.ox, st.oy);
+      g.quadraticCurveTo(st.cx, st.cy, st.ex, st.ey);
+      g.stroke();
+      g.strokeStyle = 'rgba(198,182,132,0.55)';
+      g.lineWidth = 1.1 * bs;
+      g.beginPath();
+      g.moveTo(st.ox, st.oy);
+      g.quadraticCurveTo(st.cx, st.cy, st.ex, st.ey);
+      g.stroke();
+      // fine barbs angled toward the tip, sparse, alternating sides
+      var steps = Math.max(6, Math.floor(st.L / 11));
+      for (var j = 1; j < steps; j++) {
+        var u = j / steps;
+        var p = qPoint(st, u);
+        var tang = Math.atan2(p.ty, p.tx);
+        var blen = (7 + rg() * 5.5) * bs * (1 - u * 0.25);
+        for (var sd = -1; sd <= 1; sd += 2) {
+          if (rg() < 0.18) continue;   // barbs are sparse, with gaps
+          var ba = tang + sd * (Math.PI / 2 - 0.95);
+          g.strokeStyle = u < 0.5 ? 'rgba(96,150,128,0.26)' : 'rgba(140,160,105,0.28)';
+          g.lineWidth = 0.8;
+          g.beginPath();
+          g.moveTo(p.x, p.y);
+          g.lineTo(p.x + Math.cos(ba) * blen, p.y + Math.sin(ba) * blen);
+          g.stroke();
+        }
+      }
+    }
+
+    // short covert feathers fanning from the same base: the dense,
+    // fluffy gold-green skirt the long feathers rise out of
+    var L0 = layout();
+    var cox = L0.bx + L0.rx * 0.72, coy = L0.by - L0.ry * 0.34;
+    var reach = 0.60 * Math.max(W, H);
+    var NC = 42;
+    for (var c = 0; c < NC; c++) {
+      var ct = c / (NC - 1);
+      var cang = lerp(-1.86, 0.30, ct) + (rg() - 0.5) * 0.09;
+      var cL = reach * (0.16 + rg() * 0.14) * (0.75 + 0.45 * Math.sin(Math.PI * ct));
+      var cdx = Math.cos(cang), cdy = Math.sin(cang);
+      var cbow = (rg() - 0.4) * 0.2;
+      var cst = {
+        ox: cox, oy: coy,
+        cx: cox + cdx * cL * 0.5 - cdy * cL * cbow,
+        cy: coy + cdy * cL * 0.5 + cdx * cL * cbow,
+        ex: cox + cdx * cL, ey: coy + cdy * cL, L: cL
+      };
+      g.strokeStyle = 'rgba(150,140,95,0.4)';
+      g.lineWidth = 0.9;
+      g.beginPath();
+      g.moveTo(cst.ox, cst.oy);
+      g.quadraticCurveTo(cst.cx, cst.cy, cst.ex, cst.ey);
+      g.stroke();
+      var cn = Math.max(5, Math.floor(cL / 9));
+      for (var cj = 1; cj <= cn; cj++) {
+        var cu = cj / cn;
+        var cp = qPoint(cst, cu);
+        var ctang = Math.atan2(cp.ty, cp.tx);
+        var cside = (cj % 2 === 0) ? 1 : -1;
+        var clen = (8 + 11 * Math.sin(Math.PI * Math.min(1, cu * 1.05))) * bs;
+        drawLeafAt(g, cp.x, cp.y, clen, clen * 0.38,
+          ctang + Math.PI / 2 + cside * 0.58,
+          rampAt(0.28 + cu * 0.34 + (rg() - 0.5) * 0.05), 0.2);
+      }
+    }
+  }
+
   function drawTail(now) {
     var t = now / 1000;
     for (var s = 0; s < strands.length; s++) {
       var st = strands[s];
-      // filaments
-      ctx.strokeStyle = 'rgba(84,110,120,0.4)';
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      ctx.moveTo(st.ox, st.oy);
-      ctx.quadraticCurveTo(st.cx, st.cy, st.ex, st.ey);
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(84,110,120,0.16)';
-      ctx.beginPath();
-      ctx.moveTo(st.ox, st.oy);
-      ctx.quadraticCurveTo(st.cx + 5, st.cy + 3, st.ex, st.ey);
-      ctx.stroke();
-      // leaflets
+      // the blade: leaflets only in the outer half of the feather,
+      // running green at its base to gold at the tip
       var n = Math.max(9, Math.floor(st.L / 17));
-      for (var j = 2; j <= n; j++) {
+      var j0 = Math.max(2, Math.ceil(n * 0.52));
+      for (var j = j0; j <= n; j++) {
         var u = j / n;
+        var v = (u - 0.52) / 0.48;
         var p = qPoint(st, u);
         var tang = Math.atan2(p.ty, p.tx);
         var sway = Math.sin(t * 0.6 + st.phase + u * 2.2) * 0.045;
         var side = (j % 2 === 0) ? 1 : -1;
-        var llen = (10 + 15 * Math.sin(Math.PI * Math.min(1, u * 1.06))) * (S / 620);
+        var llen = (10 + 16 * Math.sin(Math.PI * (0.15 + 0.7 * v))) * (S / 620);
         drawLeafAt(ctx, p.x, p.y, llen, llen * 0.36,
           tang + Math.PI / 2 + side * (0.62 + st.off * 0.2) + sway,
-          rampAt(u * 0.92 + st.off * 0.06), 0.22);
+          rampAt(0.22 + v * 0.55 + st.off * 0.06), 0.22);
       }
-      // eye spot near the tip of chosen strands
+      // the ocellus, layered inside-out as it grows in a real feather:
+      // gold rim, bronze, emerald, violet, and a deep navy heart
       if (st.eye) {
-        var ep = qPoint(st, 0.94);
+        var ep = qPoint(st, 0.95);
         var ea = Math.atan2(ep.ty, ep.tx) + Math.PI / 2;
         ctx.save();
         ctx.translate(ep.x, ep.y);
         ctx.rotate(ea);
-        var es = S / 620;
-        ctx.fillStyle = '#c9932f';
-        ctx.beginPath(); ctx.ellipse(0, 0, 10 * es, 15 * es, 0, 0, 6.283); ctx.fill();
-        ctx.fillStyle = '#1f6f6a';
-        ctx.beginPath(); ctx.ellipse(0, 0, 7 * es, 11 * es, 0, 0, 6.283); ctx.fill();
-        ctx.fillStyle = '#27356e';
-        ctx.beginPath(); ctx.ellipse(0, 1 * es, 4.2 * es, 7 * es, 0, 0, 6.283); ctx.fill();
-        ctx.fillStyle = '#57c1b6';
-        ctx.beginPath(); ctx.ellipse(0, 2.4 * es, 2 * es, 3.4 * es, 0, 0, 6.283); ctx.fill();
+        var es = (S / 620) * 1.5;
+        ctx.fillStyle = '#d9a83c';
+        ctx.beginPath(); ctx.ellipse(0, 0, 15 * es, 22.5 * es, 0, 0, 6.283); ctx.fill();
+        ctx.fillStyle = '#a05e2c';
+        ctx.beginPath(); ctx.ellipse(0, 0.4 * es, 12 * es, 18.5 * es, 0, 0, 6.283); ctx.fill();
+        ctx.fillStyle = '#1e7a52';
+        ctx.beginPath(); ctx.ellipse(0, 0.7 * es, 9 * es, 14.5 * es, 0, 0, 6.283); ctx.fill();
+        ctx.fillStyle = '#4b2a7a';
+        ctx.beginPath(); ctx.ellipse(0, 1.1 * es, 6.2 * es, 10.5 * es, 0, 0, 6.283); ctx.fill();
+        ctx.fillStyle = '#131f4d';
+        ctx.beginPath(); ctx.ellipse(0, 1.8 * es, 4.4 * es, 7.6 * es, 0, 0, 6.283); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.beginPath(); ctx.ellipse(-1.8 * es, -4.2 * es, 1.1 * es, 1.7 * es, 0, 0, 6.283); ctx.fill();
         ctx.restore();
+      } else if (s % 4 === 3) {
+        // back-row feathers end in a fishtail: two leaflets split in a V
+        var fp = qPoint(st, 0.99);
+        var fa2 = Math.atan2(fp.ty, fp.tx);
+        var fs = (S / 620);
+        drawLeafAt(ctx, fp.x, fp.y, 21 * fs, 7 * fs,
+          fa2 + Math.PI / 2 - 0.52, rampAt(0.72), 0.2);
+        drawLeafAt(ctx, fp.x, fp.y, 21 * fs, 7 * fs,
+          fa2 + Math.PI / 2 + 0.52, rampAt(0.78), 0.2);
       }
     }
   }
@@ -493,6 +658,7 @@
   function frame(now) {
     var t = now / 1000;
     ctx.drawImage(groundCv, 0, 0, W, H);
+    ctx.drawImage(trainCv, 0, 0, W, H);
     drawTail(now);
     ctx.drawImage(bodyCv, 0, 0, W, H);
     ctx.drawImage(frontCv, 0, 0, W, H);
@@ -560,6 +726,7 @@
     R = mulberry(seed);
     buildGround();
     buildStrands();
+    buildTrain();
     buildBody();
     buildFront();
     drifters = [];
