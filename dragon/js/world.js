@@ -11,7 +11,6 @@ import { Particles, flameSprites } from './particles.js';
 import { Page } from './page.js';
 import { Paper } from './paper.js';
 import { Sound } from './audio.js';
-import { Butterflies } from './butterflies.js';
 import { BACKDROPS } from './backdrops.js';
 
 export const MAX_DRAGONS = 6;
@@ -23,7 +22,7 @@ export class World {
     this.time = 0; this.frame = 0; this.running = true; this.last = 0;
     this.dragons = []; this.renderers = new Map(); this.leaderId = null; this.selectedId = null;
     this.flocking = true;
-    this.stats = { butterflies: 0, words: 0 }; this.leavers = []; this.particles = new Particles(); this.page = new Page(); this.paper = new Paper(); this.sound = new Sound(); this.butterflies = new Butterflies(this); this.butterfliesOn = false;
+    this.stats = { words: 0 }; this.leavers = []; this.particles = new Particles(); this.page = new Page(); this.paper = new Paper(); this.sound = new Sound();
     this.paperOn = true;
     this.hot = []; this.sceneCache = {}; this.scene = null; this.sceneName = 'paper';
     this.listeners = new Set();
@@ -43,6 +42,9 @@ export class World {
     try { want = want || localStorage.getItem('draco.scene'); wx = localStorage.getItem('draco.weather'); } catch (_) {}
     this.initial = { scene: want, weather: wx };
   }
+
+  /** Prey for the dragons' hunt: the garden's butterflies, by day. */
+  get butterflies() { return this.scene ? this.scene.butterflies || null : null; }
 
   // ---------------------------------------------------------------- backdrop
   /** 'paper' (the page of text), 'garden' or 'weather'. */
@@ -204,7 +206,7 @@ export class World {
     const sc = this.scene, pg = this.page, pp = this.paperOn && !sc ? this.paper : null;
     if (!sc) { const circs = []; for (const d of this.dragons) d.collectObstacles(circs); pg.update(dt, circs, this); }
     this.particles.update(dt, this.time, sc ? null : (q, ddt) => { pg.hit(q, this); if (pp) pp.burnAt(q.x, q.y, ddt, 7, 0.8 + 0.1 * Math.random(), q.hue); });
-    if (sc) { this.buildHot(); sc.update(dt); } else this.butterflies.update(dt, this.time);
+    if (sc) { this.buildHot(); sc.update(dt); }
     this.paper.enabled = !!pp;
     this.paper.update(dt, pp ? this.particles : null);
 
@@ -266,7 +268,7 @@ export class World {
       g.save(); g.translate(c.x, c.y); g.scale(1 + 0.08 * e, 1 + 0.08 * e); g.translate(-c.x + 30 * e, -c.y + 44 * e); g.globalAlpha = 0.9 - 0.7 * e; r.shadow(g, T, env); g.restore();
       g.save(); g.translate(c.x, c.y); g.scale(k, k); g.translate(-c.x, -c.y); r.draw(g, T, env); g.restore();
     }
-    if (sc) sc.drawTop(g, T); else this.butterflies.draw(g, T);
+    if (sc) sc.drawTop(g, T);
     if (this.showSelection) this.drawSelection(g, T);
     this.particles.draw(g, T, this.time);
     this.drawBloom(g, T);

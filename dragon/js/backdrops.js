@@ -48,6 +48,8 @@ const NIGHT = { shades: ['#1d4a38', '#27614a', '#173b2d', '#31735a'], ground: [2
 const BLOOMS = [[348, 0.82, 0.62], [48, 0.95, 0.58], [0, 0, 0.97], [272, 0.65, 0.7], [28, 0.95, 0.58]];     // h, s, l
 
 export class Garden extends Backdrop {
+  /** What the dragons stalk: the butterflies, but only by day. */
+  get butterflies() { const self = this; return { get list() { return self.dark ? [] : self.bfs; }, nearest(x, y) { let best = null, bd = 1e9; for (const b of this.list) { const d = Math.hypot(b.x - x, b.y - y); if (d < bd) { bd = d; best = b; } } return best ? { bf: best, d: bd } : null; } }; }
   build() {
     const w = this.world, W = this.W, H = this.H, u = this.u, GC = this.GC = 12;
     this.gw = Math.ceil(W / GC); this.gh = Math.ceil(H / GC); this.heat = new Float32Array(this.gw * this.gh); this.ash = new Float32Array(this.gw * this.gh);
@@ -61,6 +63,7 @@ export class Garden extends Backdrop {
     this.flyers = [];
     for (let i = 0; i < 5; i++) this.flyers.push({ k: 'bee', x: rr(0, W), y: rr(0, H), a: rr(0, TAU), f: this.flowers[i * 3 % Math.max(1, this.flowers.length)], t: 0, ph: Math.random() * 9 });
     for (let i = 0; i < 4; i++) this.flyers.push({ k: 'bf', x: rr(0, W), y: rr(0, H), a: rr(0, TAU), hue: [330, 40, 200, 280][i], ph: Math.random() * 9, t: 0 });
+    this.bfs = this.flyers.filter(q => q.k === 'bf');
     for (let i = 0; i < 14; i++) this.flyers.push({ k: 'fly', x: rr(0, W), y: rr(0, H), a: rr(0, TAU), ph: Math.random() * 9, t: 0 });
     this.lastCrackle = 0;
   }

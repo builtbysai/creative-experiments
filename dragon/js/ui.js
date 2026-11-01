@@ -24,7 +24,6 @@ const I = {
   restore: '<path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v3h3"/>',
   plus: '<path d="M8 3v10M3 8h10"/>',
   close: '<path d="M4 4l8 8M12 4l-8 8"/>',
-  wings: '<path d="M8 8C6 3 2 3 2.5 6.5 3 9 6 9 8 8zM8 8c2-5 6-5 5.5-1.5C13 9 10 9 8 8zM8 8c-3 1-5 4-3.5 5.3C6 14 7.5 11 8 8zM8 8c3 1 5 4 3.5 5.3C10 14 8.5 11 8 8z"/>',
   scene: '<path d="M1.5 13.5l4.2-6.5 2.8 4 2-2.8 4 5.3z"/><circle cx="11.5" cy="4" r="1.6"/>',
   crown: '<path d="M2.5 11.5l-.5-6 3.2 2.5L8 4l2.8 4 3.2-2.5-.5 6z"/>'
 };
@@ -154,9 +153,9 @@ export class Panel {
     this.saveSoon = (() => { let t; return () => { clearTimeout(t); t = setTimeout(() => Store.save(world), 300); }; })();
   }
 
-  /** The burn tally: words and butterflies set alight. Appears with the first one. */
+  /** The burn tally: words (or garden flowers) set alight. Appears with the first one. */
   count() {
-    const n = this.world.stats.words + this.world.stats.butterflies;
+    const n = this.world.stats.words;
     if (n === this.lastTally) return;
     this.lastTally = n; this.tally.classList.toggle('on', n > 0);
     const b = this.tally.querySelector('b'); b.textContent = n;
@@ -190,7 +189,7 @@ export class Panel {
     for (const b of this.wxRow.children) b.setAttribute('aria-pressed', String(b.dataset.w === w.weatherMode));
     this.menuEl.querySelector('.wx').classList.toggle('on', s === 'weather');
     this.tools.scene.setAttribute('aria-pressed', String(s !== 'paper' || this.menuEl.classList.contains('open')));
-    this.tools.paper.disabled = s !== 'paper'; this.tools.butterflies.disabled = s !== 'paper';
+    this.tools.paper.disabled = s !== 'paper';
     const tip = s === 'garden' ? 'Regrow the garden' : s === 'weather' ? 'Clear the scorch' : 'Mend the page';
     this.tools.restore.dataset.tip = tip; this.tools.restore.setAttribute('aria-label', tip);
     this.tally.querySelector('span').textContent = s === 'garden' ? 'Flowers burnt' : 'Burnt';
@@ -211,7 +210,6 @@ export class Panel {
     };
     tool('shuffle', 'dice', 'New look', () => this.shuffle());
     toggle('flock', 'flock', 'Flock together', () => w.flocking, v => { w.flocking = v; });
-    toggle('butterflies', 'wings', 'Butterflies', () => w.butterfliesOn, v => { w.butterfliesOn = v; });
     tool('scene', 'scene', 'Background', () => this.menu(!this.menuEl.classList.contains('open')));
     toggle('paper', 'flame', 'Fire burns the page', () => w.paperOn, v => { w.paperOn = v; });
     const snd = toggle('sound', 'sound', 'Sound', () => !w.sound.muted, v => { w.sound.unlock(); w.sound.setMuted(!v); snd.innerHTML = icon(v ? 'sound' : 'mute'); if (v) w.sound.blip(true); });
