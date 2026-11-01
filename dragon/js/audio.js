@@ -25,6 +25,9 @@ export class Sound {
     this.haptics = typeof navigator !== 'undefined' && !!navigator.vibrate;
   }
 
+  suspend() { try { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); } catch (_) {} }
+  resume() { try { if (this.ctx && this.ctx.state === 'suspended' && !this.muted) this.ctx.resume(); } catch (_) {} }
+
   unlock() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
