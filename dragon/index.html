@@ -390,11 +390,11 @@ function initDragon(enter) {
   buildGeometry();
   D.headAng = Math.atan2(S[0].ty, S[0].tx);
   D.legs = LEGDEF.map(d => {
-    const l = Object.assign({ sw: null, lift: 0, fx: 0, fy: 0 }, d);
+    const l = Object.assign({ sw: null, lift: 0, fx: 0, fy: 0, fang: 0 }, d);
     return l;
   });
   updateLegs(0);
-  for (const l of D.legs) { l.fx = l.tgx; l.fy = l.tgy; }
+  for (const l of D.legs) { l.fx = l.tgx; l.fy = l.tgy; l.fang = Math.atan2(l.ty, l.tx) + l.side * 0.38; }
   updateLegs(0);
   initialised = true;
 }
@@ -418,9 +418,14 @@ function updateLegs(dt) {
     if (!l.sw) continue;
     l.sw.t += dt / l.sw.dur;
     const t = Math.min(1, l.sw.t), e = sstep(0, 1, t);
-    l.fx = lerp(l.sw.x0, l.tgx, e); l.fy = lerp(l.sw.y0, l.tgy, e);
+    const arc = Math.sin(t * PI) * L * 0.028 * l.side;
+    l.fx = lerp(l.sw.x0, l.tgx, e) + l.nx * arc; l.fy = lerp(l.sw.y0, l.tgy, e) + l.ny * arc;
     l.lift = Math.sin(t * PI);
-    if (l.sw.t >= 1) { l.sw = null; l.lift = 0; l.fx = l.tgx; l.fy = l.tgy; }
+    // the foot turns to face where it will land, and then stays put on the ground
+    const want = Math.atan2(l.ty, l.tx) + l.side * 0.38;
+    let da = want - l.fang; da = Math.atan2(Math.sin(da), Math.cos(da));
+    l.fang += da * (1 - Math.exp(-dt * 16));
+    if (l.sw.t >= 1) { l.sw = null; l.lift = 0; l.fx = l.tgx; l.fy = l.tgy; l.land = clock; }
     else swingPair = l.pair;
   }
   const thr = L * (0.1 + 0.1 * vk);
@@ -752,6 +757,39 @@ function limbPath(ax, ay, bx, by, wa, wm, wb, p) {
   p.closePath();
 }
 
+// A leg as one smooth silhouette: thigh muscle, narrow knee, tapering shin, ankle.
+const LEG_PROFILE = [[0, 0.050], [0.16, 0.066], [0.34, 0.062], [0.5, 0.036], [0.62, 0.040], [0.8, 0.030], [1, 0.021]];
+function legCurve(l, n) {
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, u = 1 - t;
+    // quadratic through the knee so the bend is rounded, not a hinge
+    const cx = 2 * l.kx - 0.5 * (l.ax + l.ex), cy = 2 * l.ky - 0.5 * (l.ay + l.ey);
+    pts.push({ x: u * u * l.ax + 2 * u * t * cx + t * t * l.ex, y: u * u * l.ay + 2 * u * t * cy + t * t * l.ey, t });
+  }
+  for (let i = 0; i <= n; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n, i + 1)], d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    pts[i].nx = -(b.y - a.y) / d; pts[i].ny = (b.x - a.x) / d;
+    let w = LEG_PROFILE[LEG_PROFILE.length - 1][1];
+    for (let k = 1; k < LEG_PROFILE.length; k++) if (pts[i].t <= LEG_PROFILE[k][0]) {
+      const p0 = LEG_PROFILE[k - 1], p1 = LEG_PROFILE[k];
+      w = lerp(p0[1], p1[1], sstep(0, 1, (pts[i].t - p0[0]) / (p1[0] - p0[0]))); break;
+    }
+    pts[i].w = w * L;
+  }
+  return pts;
+}
+function legOutline(l, p) {
+  const c = legCurve(l, 16);
+  p.moveTo(c[0].x + c[0].nx * c[0].w / 2, c[0].y + c[0].ny * c[0].w / 2);
+  for (let i = 1; i < c.length; i++) p.lineTo(c[i].x + c[i].nx * c[i].w / 2, c[i].y + c[i].ny * c[i].w / 2);
+  const e = c[c.length - 1];
+  p.arc(e.x, e.y, e.w / 2, Math.atan2(e.ny, e.nx), Math.atan2(e.ny, e.nx) + PI, false);
+  for (let i = c.length - 1; i >= 0; i--) p.lineTo(c[i].x - c[i].nx * c[i].w / 2, c[i].y - c[i].ny * c[i].w / 2);
+  p.closePath();
+  return c;
+}
+
 let bodyPath = null, legPath = null;
 function buildPaths() {
   bodyPath = new Path2D();
@@ -763,8 +801,7 @@ function buildPaths() {
   bodyPath.closePath();
   legPath = new Path2D();
   for (const l of D.legs) {
-    limbPath(l.ax, l.ay, l.kx, l.ky, L * 0.056, L * 0.062, L * 0.034, legPath);
-    limbPath(l.kx, l.ky, l.ex, l.ey, L * 0.034, L * 0.036, L * 0.02, legPath);
+    legOutline(l, legPath);
   }
 }
 
@@ -848,32 +885,76 @@ function drawShadows() {
 }
 
 function drawLegs() {
+  const lw = Math.max(1.2, L * 0.0028);
   for (const l of D.legs) {
-    const lift = 1 + l.lift * 0.3;
-    ctx.lineJoin = 'round';
-    for (const seg of [[l.ax, l.ay, l.kx, l.ky, L * 0.056, L * 0.062, L * 0.034], [l.kx, l.ky, l.ex, l.ey, L * 0.034, L * 0.036, L * 0.02]]) {
-      const p = new Path2D(); limbPath(seg[0], seg[1], seg[2], seg[3], seg[4], seg[5], seg[6], p);
-      const gr = ctx.createLinearGradient(seg[0], seg[1], seg[2], seg[3]);
-      gr.addColorStop(0, T.skin); gr.addColorStop(1, T.skinDeep);
-      ctx.fillStyle = gr; ctx.fill(p);
-      ctx.strokeStyle = T.rim; ctx.lineWidth = Math.max(1.2, L * 0.0028); ctx.stroke(p);
-      ctx.strokeStyle = rgba(T.skinLight, 0.55); ctx.lineWidth = Math.max(1, L * 0.004); ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(seg[0] - 0.6, seg[1] - 1); ctx.lineTo(seg[2] - 0.6, seg[3] - 1); ctx.stroke();
+    const lift = l.lift, sc = 1 + lift * 0.14;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    // foot: webbed paw with four toes, fanned wider mid-stride, claws at the tips
+    const fa = l.fang, ca0 = Math.cos(fa), sa0 = Math.sin(fa);
+    const spread = 0.3 + lift * 0.2, tl = L * 0.037 * sc, pr = L * 0.025 * sc;
+    const toes = [];
+    for (let c = 0; c < 4; c++) {
+      const a = fa + (c - 1.5) * spread;
+      toes.push({ a, bx: l.ex + Math.cos(a) * pr * 0.9, by: l.ey + Math.sin(a) * pr * 0.9,
+        tx: l.ex + Math.cos(a) * (pr * 0.9 + tl * (c === 1 || c === 2 ? 1 : 0.85)), ty: l.ey + Math.sin(a) * (pr * 0.9 + tl * (c === 1 || c === 2 ? 1 : 0.85)) });
     }
-    ctx.fillStyle = T.skinDeep; ctx.beginPath(); ctx.arc(l.kx, l.ky, L * 0.012, 0, TAU); ctx.fill();
-    // paw + claws
-    const fa = Math.atan2(l.ty, l.tx);
-    ctx.fillStyle = T.skin; ctx.strokeStyle = T.rim; ctx.lineWidth = 1.3;
-    ctx.beginPath(); ctx.ellipse(l.ex, l.ey, L * 0.026 * lift, L * 0.021 * lift, fa, 0, TAU); ctx.fill(); ctx.stroke();
-    for (let c = -1; c <= 1; c++) {
-      const ca = fa + c * 0.5 + (l.side * 0.12), cl = L * 0.046 * lift;
-      const bx = l.ex + Math.cos(ca) * L * 0.022 * lift, by = l.ey + Math.sin(ca) * L * 0.022 * lift;
+    // web
+    ctx.fillStyle = T.skinDeep; ctx.strokeStyle = T.rim; ctx.lineWidth = lw;
+    ctx.beginPath(); ctx.moveTo(l.ex, l.ey);
+    for (const t of toes) ctx.lineTo(t.bx + (t.tx - t.bx) * 0.55, t.by + (t.ty - t.by) * 0.55);
+    ctx.closePath(); ctx.fill();
+    // toes
+    for (const t of toes) {
+      const px = -Math.sin(t.a), py = Math.cos(t.a);
+      ctx.fillStyle = T.skin;
+      ctx.beginPath();
+      ctx.moveTo(l.ex + px * L * 0.009, l.ey + py * L * 0.009);
+      ctx.lineTo(t.tx + px * L * 0.005, t.ty + py * L * 0.005); ctx.lineTo(t.tx - px * L * 0.005, t.ty - py * L * 0.005);
+      ctx.lineTo(l.ex - px * L * 0.009, l.ey - py * L * 0.009); ctx.closePath(); ctx.fill(); ctx.stroke();
+      // claw
+      const cl = L * 0.018 * sc;
       ctx.fillStyle = T.horn;
-      ctx.beginPath(); ctx.moveTo(bx - Math.sin(ca) * 2.6, by + Math.cos(ca) * 2.6);
-      ctx.quadraticCurveTo(bx + Math.cos(ca) * cl * 0.6, by + Math.sin(ca) * cl * 0.6 + 1, bx + Math.cos(ca) * cl, by + Math.sin(ca) * cl);
-      ctx.lineTo(bx + Math.sin(ca) * 2.6, by - Math.cos(ca) * 2.6); ctx.closePath(); ctx.fill();
-      ctx.lineWidth = 0.9; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(t.tx + px * 2.1, t.ty + py * 2.1);
+      ctx.quadraticCurveTo(t.tx + Math.cos(t.a) * cl * 0.65 + px * 0.6, t.ty + Math.sin(t.a) * cl * 0.65 + py * 0.6 + 0.6, t.tx + Math.cos(t.a) * cl, t.ty + Math.sin(t.a) * cl + 1);
+      ctx.lineTo(t.tx - px * 2.1, t.ty - py * 2.1); ctx.closePath(); ctx.fill(); ctx.lineWidth = 0.8; ctx.stroke(); ctx.lineWidth = lw;
     }
+    ctx.fillStyle = T.skin;
+    ctx.beginPath(); ctx.ellipse(l.ex, l.ey, pr * 1.05, pr * 0.85, fa, 0, TAU); ctx.fill(); ctx.stroke();
+    // limb silhouette
+    const p = new Path2D(), c = legOutline(l, p);
+    const gr = ctx.createLinearGradient(l.ax, l.ay, l.ex, l.ey);
+    gr.addColorStop(0, T.skin); gr.addColorStop(0.45, T.skin); gr.addColorStop(1, T.skinDeep);
+    ctx.fillStyle = gr; ctx.fill(p);
+    ctx.strokeStyle = T.rim; ctx.lineWidth = lw; ctx.stroke(p);
+    // lit side: a soft highlight offset toward the light
+    ctx.save(); ctx.clip(p);
+    ctx.strokeStyle = rgba(T.skinLight, 0.5); ctx.lineCap = 'round';
+    for (const side of [1]) {
+      ctx.lineWidth = Math.max(1.4, L * 0.009);
+      ctx.beginPath();
+      c.forEach((q, i) => {
+        const sgn = (q.nx * LX + q.ny * LY) > 0 ? 1 : -1;
+        const x = q.x + q.nx * sgn * q.w * 0.22 * side, y = q.y + q.ny * sgn * q.w * 0.22 * side;
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      });
+      ctx.stroke();
+    }
+    // scale ticks across the limb
+    ctx.strokeStyle = rgba(T.rim, 0.3); ctx.lineWidth = 0.9;
+    for (let i = 1; i < c.length - 1; i += 1) {
+      const q = c[i]; ctx.beginPath();
+      ctx.moveTo(q.x - q.nx * q.w * 0.42, q.y - q.ny * q.w * 0.42);
+      ctx.quadraticCurveTo(q.x + (c[i + 1].x - c[i - 1].x) * 0.35, q.y + (c[i + 1].y - c[i - 1].y) * 0.35, q.x + q.nx * q.w * 0.42, q.y + q.ny * q.w * 0.42);
+      ctx.stroke();
+    }
+    ctx.restore();
+    // knee spur
+    const kd = Math.atan2(l.ky - (l.ay + l.ey) / 2, l.kx - (l.ax + l.ex) / 2);
+    ctx.fillStyle = T.horn; ctx.strokeStyle = T.rim; ctx.lineWidth = 0.9;
+    const kx = l.kx, ky = l.ky, kl = L * 0.03;
+    ctx.beginPath(); ctx.moveTo(kx - Math.sin(kd) * 2.4, ky + Math.cos(kd) * 2.4);
+    ctx.lineTo(kx + Math.cos(kd) * kl, ky + Math.sin(kd) * kl); ctx.lineTo(kx + Math.sin(kd) * 2.4, ky - Math.cos(kd) * 2.4);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
   }
 }
 
