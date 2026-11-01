@@ -54,7 +54,7 @@ export class Anatomy {
     this.wing = {
       fingers: nF, span: v.wingSpan,
       open: Array.from({ length: nF }, (_, i) => lerp(0.8, 2.26, f(i))),
-      fold: Array.from({ length: nF }, (_, i) => lerp(3.10, 3.46, f(i))),
+      fold: Array.from({ length: nF }, (_, i) => lerp(3.1, 3.34, f(i))),
       lens: Array.from({ length: nF }, (_, i) => sampleLen(f(i)) * v.wingSpan),
       armLen: 0.18 * Math.pow(v.wingSpan, 0.8),
       shoulderT: this.shoulderT - 0.02,

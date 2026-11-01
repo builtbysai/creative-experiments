@@ -88,7 +88,7 @@ export class DragonRenderer {
   /** Membrane outline: shoulder, arm, along the first finger, scalloped between fingertips, back to the flank. */
   wingPath(w) {
     const d = this.d, L = d.L, wc = d.anatomy.wing, n = wc.fingers, p = new Path2D();
-    const pull = 0.1 + 0.2 * wc.scallop;
+    const pull = lerp(0.03, 0.1 + 0.2 * wc.scallop, sstep(0.08, 0.5, w.o));      // a folded wing has a smooth, pleated edge, not scallops
     p.moveTo(w.S[0], w.S[1]);
     p.quadraticCurveTo((w.S[0] + w.W[0]) / 2 + w.f[0] * L * 0.012, (w.S[1] + w.W[1]) / 2 + w.f[1] * L * 0.012, w.W[0], w.W[1]);
     p.lineTo(w.joints[0][0], w.joints[0][1]); p.lineTo(w.tips[0][0], w.tips[0][1]);
@@ -445,7 +445,7 @@ export class DragonRenderer {
     const d = this.d, L = d.L, w = d.wg[idx], wc = d.anatomy.wing, n = wc.fingers, path = this.wingPaths[idx];
     const mid = w.tips[Math.floor((n - 1) / 2)], mid2 = w.tips[Math.ceil((n - 1) / 2)];
     const mx = (mid[0] + mid2[0]) / 2, my = (mid[1] + mid2[1]) / 2;
-    const alpha = clamp(0.42 + 0.6 * wc.membrane, 0.4, 1);
+    const alpha = Math.max(clamp(0.42 + 0.6 * wc.membrane, 0.4, 1), 0.96 - 1.4 * w.o);
     const grad = g.createLinearGradient(w.S[0], w.S[1], mx, my);
     grad.addColorStop(0, P.wingA); grad.addColorStop(0.55, P.wingA); grad.addColorStop(1, P.wingB);
     g.save();

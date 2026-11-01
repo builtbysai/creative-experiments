@@ -56,7 +56,7 @@ export class Page {
 
   /** Lay the words out in lines, flowing around `circs` (optional). Returns the bottom of the text. */
   layout(circs) {
-    const { fs } = this, minRun = fs * 2.2, clear = fs * 0.55;
+    const { fs } = this, minRun = clamp((this.colX1 - this.colX0) * 0.26, fs * 2.2, fs * 7), clear = fs * 0.55;     // no stranded one-word scraps beside the body
     let y = this.topY, first = true;
     for (const b of this.blocks) {
       const st = STY[b.style], size = fs * st.size, lh = st.lh(fs);
