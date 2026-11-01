@@ -223,7 +223,30 @@ class InspectHole extends Action {
   }
 }
 
-export const ACTIONS = { inspect: InspectHole, glance: Glance, sniff: Sniff, stretch: Stretch, yawn: Yawn, shake: Shake, tail: TailSwish, read: ReadWord, burn: BurnWord, sleep: Sleep, chase: TailChase, greet: Greet };
+/** Stalk a moth: creep up, pounce with a snap, and sometimes finish it with a puff of fire. */
+class Hunt extends Action {
+  weight(c) { const m = this.brain.world.moths; return m && m.list.length ? 0.9 + 2.2 * c.g.curiosity : 0; }
+  start() {
+    this.t = 0; this.phase = 0; this.puff = false; this.fire = this.brain.ctx.g.pyro > 0.45 && rnd() < 0.55;
+    const d = this.dragon, n = this.brain.world.moths.nearest(d.x, d.y); this.moth = n && n.d < 2.6 * this.L ? n.moth : null;
+  }
+  tick(dt, cmd) {
+    const m = this.moth; if (!m || m.burn >= 0 || !this.brain.world.moths.list.includes(m)) return false;
+    const d = this.dragon, dx = m.x - d.x, dy = m.y - d.y, dist = Math.hypot(dx, dy); this.t += dt; cmd.look = m; cmd.tail = 0.5;
+    if (this.phase === 0) {
+      cmd.mode = 'go'; cmd.tx = m.x; cmd.ty = m.y; cmd.stand = 0.2 * this.L; cmd.speed = dist > 0.8 * this.L ? 0.9 : 0.45; cmd.sniff = 0.3;
+      if (dist < 0.4 * this.L * (this.fire ? 1.4 : 1) || this.t > 7) { this.phase = 1; this.t = 0; }
+      return true;
+    }
+    cmd.mode = 'hold'; cmd.speed = 0;
+    if (this.fire) { cmd.breath = this.t > 0.2 && this.t < 0.9; cmd.wing = 0.5; return this.t < 1.3; }
+    cmd.jaw = Math.sin(clamp(this.t / 0.5, 0, 1) * PI * 2) > 0 ? 0.9 : 0.1; cmd.headBias = 0.1;     // snap, snap
+    if (!this.puff && this.t > 0.15) { this.puff = true; m.rest = 0; m.a += rr(-1, 1) + PI * 0.5; m.v = 90; }
+    return this.t < 1.1;
+  }
+}
+
+export const ACTIONS = { hunt: Hunt, inspect: InspectHole, glance: Glance, sniff: Sniff, stretch: Stretch, yawn: Yawn, shake: Shake, tail: TailSwish, read: ReadWord, burn: BurnWord, sleep: Sleep, chase: TailChase, greet: Greet };
 
 // ------------------------------------------------------------------ brain
 export class Brain {
@@ -514,7 +537,7 @@ export class Brain {
       this.fireHold = Math.max(0, this.fireHold - dt);
       cmd.breath = p.down || this.fireHold > 0;
     } else if (ctx.isLeader === false && ctx.leader && p.down) {
-      if (!this.prevDown) this.mimic = ctx.g.sociability > 0.5 && rnd() < 0.8;
+      if (!this.prevDown) this.mimic = ctx.g.sociability > 0.5 && rnd() < 0.4;
       cmd.breath = cmd.breath || (this.mimic && ctx.leader.breath > 0.3);
     }
     if (cmd.breath) { cmd.wing = Math.max(cmd.wing, 0.6); cmd.mode = cmd.mode === 'curl' ? 'go' : cmd.mode; }

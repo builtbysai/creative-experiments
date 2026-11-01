@@ -605,19 +605,55 @@ export class DragonRenderer {
         g.beginPath(); g.moveTo(x - 0.005, s * wy); g.lineTo(x + 0.001, s * (wy - 0.011)); g.lineTo(x + 0.005, s * wy); g.closePath(); g.fill(); g.stroke();
       }
     }
+    // closed mouth: a lip line with a faint upturn at the corner, and the lower fangs showing over the lip
+    for (const s of [-1, 1]) {
+      if (j < 0.5) {
+        const k = 1 - j * 2;
+        g.strokeStyle = rgba(P.rim, 0.55 * k); g.lineWidth = px(1.1);
+        g.beginPath(); g.moveTo(tipx - 0.006, s * 0.0125); g.quadraticCurveTo(X(0.07), s * 0.0235, X(0.05), s * 0.0305); g.quadraticCurveTo(0.036, s * 0.034, 0.03, s * 0.0345); g.stroke();
+        g.strokeStyle = rgba(P.skinDeep, 0.7 * k); g.lineWidth = px(1);
+        g.beginPath(); g.moveTo(0.032, s * 0.0345); g.quadraticCurveTo(0.026, s * 0.0375, 0.021, s * 0.0365); g.stroke();
+      }
+      if (j <= 0.12) {
+        g.fillStyle = P.horn; g.strokeStyle = rgba(P.rim, 0.8); g.lineWidth = px(0.8);
+        for (const x0 of [0.086, 0.064]) { const x = X(x0), wy = 0.0245 - (x0 - 0.064) * 0.45, h = x0 > 0.07 ? 0.0085 : 0.006;
+          g.beginPath(); g.moveTo(x - 0.0035, s * (wy - 0.001)); g.lineTo(x + 0.0005, s * (wy + h)); g.lineTo(x + 0.0035, s * (wy - 0.001)); g.closePath(); g.fill(); g.stroke(); }
+      }
+    }
+    // lower teeth when the jaw is open
+    if (j > 0.3) {
+      g.fillStyle = P.horn; g.strokeStyle = rgba(P.rim, 0.8); g.lineWidth = px(0.8);
+      for (const s of [-1, 1]) for (const x0 of [0.06, 0.074, 0.088]) {
+        const x = X(x0) + 0.01 * j, wy = 0.021 - (x0 - 0.06) * 0.35;
+        g.beginPath(); g.moveTo(x - 0.0045, s * wy); g.lineTo(x, s * (wy - 0.0085)); g.lineTo(x + 0.0045, s * wy); g.closePath(); g.fill(); g.stroke();
+      }
+    }
+    // raised nostril nodules
+    for (const s of [-1, 1]) {
+      const ng = g.createRadialGradient(tipx - 0.008, s * 0.0075, 0, tipx - 0.008, s * 0.0075, 0.0058);
+      ng.addColorStop(0, P.skinLight); ng.addColorStop(1, rgba(P.skin, 0));
+      g.fillStyle = ng; g.beginPath(); g.arc(tipx - 0.008, s * 0.0075, 0.0058, 0, TAU); g.fill();
+    }
     // nostrils flare when sniffing; brow ridges
     for (const s of [-1, 1]) {
       g.fillStyle = P.rim;
       g.beginPath(); g.ellipse(tipx - 0.006, s * 0.0062, 0.0027 * (1 + 0.7 * pose.sniff), 0.0016 * (1 + 0.9 * pose.sniff), 0, 0, TAU); g.fill();
-      g.strokeStyle = P.skinDeep; g.lineWidth = 0.0085;
-      g.beginPath(); g.moveTo(0.012, s * 0.043); g.quadraticCurveTo(0.03, s * 0.037, X(0.05), s * 0.022); g.stroke();
+      // the brow: lowered and heavy while breathing fire, lifted when curious
+      const bl = 0.6 * d.breath - 0.5 * pose.sniff, by = s * 0.0035 * bl;
+      g.strokeStyle = P.skinDeep; g.lineWidth = 0.0085 + 0.003 * Math.max(0, bl);
+      g.beginPath(); g.moveTo(0.012, s * 0.043); g.quadraticCurveTo(0.03, s * (0.037 - 0.0045 * bl), X(0.05), s * 0.022 - by); g.stroke();
+      g.strokeStyle = rgba(P.skinLight, 0.55); g.lineWidth = 0.0024;
+      g.beginPath(); g.moveTo(0.016, s * 0.0415); g.quadraticCurveTo(0.031, s * (0.0355 - 0.0045 * bl), X(0.048), s * 0.0215 - by); g.stroke();
     }
     // eyes: follow the target, blink, droop when sleepy, glow when breathing
     const lookLocal = d.lookOn ? angDiff(Math.atan2(d.look.y - p.y, d.look.x - p.x), d.headAng) : 0;
     const blink = d.blinkT >= 0 ? Math.sin(clamp(d.blinkT / 0.2, 0, 1) * PI) : 0;
     const lid = Math.max(blink, pose.eyeClose);
     for (const s of [-1, 1]) {
-      const ex = 0.036, ey = s * 0.028, rx = 0.0092, ry = 0.0076 * (1 - 0.92 * lid);
+      const ex = 0.036, ey = s * 0.028, rx = 0.0098, ry = 0.0078 * (1 - 0.92 * lid) * (1 - 0.3 * d.breath);
+      const sk = g.createRadialGradient(ex, ey, rx * 0.6, ex, ey, rx * 1.9);
+      sk.addColorStop(0, rgba(P.rim, 0.5)); sk.addColorStop(1, rgba(P.rim, 0));
+      g.fillStyle = sk; g.beginPath(); g.arc(ex, ey, rx * 1.9, 0, TAU); g.fill();
       if (d.breath > 0.1) {
         const gr = g.createRadialGradient(ex, ey, 0, ex, ey, 0.026);
         gr.addColorStop(0, this.fireCol(70, 0.75 * d.breath)); gr.addColorStop(1, this.fireCol(54, 0));
@@ -631,7 +667,8 @@ export class DragonRenderer {
         const ox = Math.cos(lookLocal) * 0.0022, oy = Math.sin(lookLocal) * 0.0034;
         g.fillStyle = '#0a0403';
         g.beginPath(); g.ellipse(ex + ox, ey + oy, 0.0016 + 0.0012 * d.breath + 0.0006 * pose.sniff, ry * 0.92, 0, 0, TAU); g.fill();
-        g.fillStyle = 'rgba(255,255,255,0.85)'; g.beginPath(); g.arc(ex - 0.0025, ey - 0.0025, 0.0011, 0, TAU); g.fill();
+        g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.arc(ex - 0.0026, ey - 0.0027, 0.0012, 0, TAU); g.fill();
+        g.fillStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.arc(ex + 0.0028, ey + 0.0026, 0.0006, 0, TAU); g.fill();
       }
       // the lid: skin drawn over the top of the eye, heavier the sleepier it is
       if (pose.eyeClose > 0.05 && lid < 0.98) {

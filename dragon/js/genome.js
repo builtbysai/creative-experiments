@@ -70,14 +70,29 @@ const DEFAULTS = Object.fromEntries(SCHEMA.map(s => [s.key, s.def]));
 
 /** Named starting points. Each is only the values that differ from the default ember dragon. */
 export const PRESETS = {
+  // the classic: red hide, gold spines, orange fire
   Ember: {},
-  Verdant: { hue: 128, sat: 0.5, light: 0.27, bellyHue: 70, bellyLight: 0.66, accentHue: 52, wingHue: 150, eyeHue: 52, fireHue: 95, pattern: 'bands', patternAmount: 0.4 },
-  Frost: { hue: 200, sat: 0.55, light: 0.42, bellyHue: 190, bellyLight: 0.8, accentHue: 190, wingHue: 215, eyeHue: 190, fireHue: 195, pattern: 'none', gloss: 1.5, horns: 1.4, spikes: 1.4 },
-  Obsidian: { hue: 265, sat: 0.18, light: 0.15, bellyHue: 275, bellyLight: 0.38, accentHue: 24, wingHue: 280, eyeHue: 20, fireHue: 12, gloss: 1.6, spikeShape: 'horn', horns: 1.4 },
-  Gilded: { hue: 40, sat: 0.72, light: 0.38, bellyHue: 48, bellyLight: 0.78, accentHue: 46, wingHue: 36, eyeHue: 10, fireHue: 44, pattern: 'rosettes', patternAmount: 0.5, spikeShape: 'fin' },
-  Amethyst: { hue: 285, sat: 0.45, light: 0.36, bellyHue: 310, bellyLight: 0.7, accentHue: 320, wingHue: 295, eyeHue: 320, fireHue: 300, pattern: 'spots', patternAmount: 0.5 },
-  Wyrmling: { size: 0.62, length: 0.85, headSize: 1.35, snout: 0.8, legLength: 1.1, wingSpan: 0.7, horns: 0.6, speed: 1.3, agility: 1.4, curiosity: 0.95, laziness: 0.15, hue: 18, sat: 0.7, light: 0.4 },
-  Elder: { size: 1.35, length: 1.3, bulk: 1.2, horns: 1.7, frill: 1.5, spikes: 1.6, speed: 0.7, agility: 0.8, laziness: 0.7, hue: 8, sat: 0.38, light: 0.24, wingSpan: 1.3, curiosity: 0.3 }
+  // a moss-green stalker: long, low and curious, with banded flanks and acid-green fire
+  Verdant: { hue: 128, sat: 0.5, light: 0.27, bellyHue: 70, bellyLight: 0.66, accentHue: 52, wingHue: 150, eyeHue: 52, fireHue: 95, pattern: 'bands', patternAmount: 0.45,
+    length: 1.25, bulk: 0.85, legLength: 0.9, neck: 1.2, wingSpan: 0.9, curiosity: 0.85, speed: 1.1 },
+  // pale and glassy, big horns and fins, cold blue fire
+  Frost: { hue: 200, sat: 0.55, light: 0.42, bellyHue: 190, bellyLight: 0.8, accentHue: 190, wingHue: 215, eyeHue: 190, fireHue: 195, gloss: 1.6, horns: 1.5, spikes: 1.5, spikeShape: 'fin',
+    frill: 1.6, membrane: 0.7, wingSpan: 1.25, wingFingers: 5, scallop: 1.5, laziness: 0.55, fireRate: 0.8, reach: 1.3 },
+  // a black, horned brute with ember-red eyes and a short temper
+  Obsidian: { hue: 265, sat: 0.18, light: 0.15, bellyHue: 275, bellyLight: 0.38, accentHue: 24, wingHue: 280, eyeHue: 20, fireHue: 12, gloss: 1.7, spikeShape: 'horn', horns: 1.6, cheeks: 1.6,
+    bulk: 1.25, torso: 1.15, neck: 0.8, claws: 1.6, pyro: 0.95, speed: 0.9, fireRate: 1.4, reach: 1.15 },
+  // a gold dragon with rosette scales, forever pleased with itself
+  Gilded: { hue: 40, sat: 0.72, light: 0.38, bellyHue: 48, bellyLight: 0.78, accentHue: 46, wingHue: 36, eyeHue: 10, fireHue: 44, pattern: 'rosettes', patternAmount: 0.55, spikeShape: 'fin',
+    gloss: 1.5, scaleSize: 1.3, frill: 1.3, blade: 1.5, sociability: 0.9, wingSpan: 1.1 },
+  // a spotted violet dragon: tall legs, tiny head, long neck, a dreamer
+  Amethyst: { hue: 285, sat: 0.45, light: 0.36, bellyHue: 310, bellyLight: 0.7, accentHue: 320, wingHue: 295, eyeHue: 320, fireHue: 300, pattern: 'spots', patternAmount: 0.55,
+    neck: 1.4, legLength: 1.2, headSize: 0.85, snout: 1.25, tail: 0.8, laziness: 0.65, curiosity: 0.9, spikes: 0.7 },
+  // small, fast, big-headed and into everything
+  Wyrmling: { size: 0.62, length: 0.85, headSize: 1.35, snout: 0.8, legLength: 1.1, wingSpan: 0.7, horns: 0.6, speed: 1.3, agility: 1.5, curiosity: 1, laziness: 0.1, hue: 18, sat: 0.7, light: 0.4,
+    eyeHue: 52, pattern: 'spots', patternAmount: 0.3, pyro: 0.7, sociability: 0.9 },
+  // huge, slow and grey-red, scarred with age
+  Elder: { size: 1.35, length: 1.3, bulk: 1.2, horns: 1.8, frill: 1.5, spikes: 1.7, cheeks: 1.4, speed: 0.7, agility: 0.8, laziness: 0.7, hue: 8, sat: 0.38, light: 0.24, wingSpan: 1.3, curiosity: 0.3,
+    pattern: 'bands', patternAmount: 0.3, fireRate: 1.3, reach: 1.3, claws: 1.5, scaleSize: 1.4, spikeShape: 'horn' }
 };
 
 const ARCHETYPES = [

@@ -147,7 +147,7 @@ export class Page {
     const paper = world.paper, u = world.unit;
     for (let i = 0; i < words.length; i++) {
       const w = words[i], cx = w.x + w.w / 2, cy = w.y - w.size * 0.3;
-      if (w.burn < 0 && paper.enabled && paper.cols && paper.flameAt(cx, cy)) this.ignite(w, 2, world, true);
+      if (w.burn < 0 && paper.enabled && paper.cols && paper.flameAt(cx, cy)) this.ignite(w, 2, world, true, paper.hueAt(cx, cy));
       if (paper.cols) {
         const h = (paper.holeAt(w.x + 1, cy) + paper.holeAt(cx, cy) + paper.holeAt(w.x + w.w - 1, cy)) / 3;
         w.hole = h;
@@ -164,26 +164,27 @@ export class Page {
         w.fx += dt * 34;
         while (w.fx >= 1) {
           w.fx -= 1;
-          P.flame(w.x + Math.random() * w.w, w.y - w.size * 0.25, rr(-8, 8), -rr(3, 7) * u, rr(0.28, 0.5), rr(0.3, 0.6) * u, 28, u);
+          P.flame(w.x + Math.random() * w.w, w.y - w.size * 0.25, rr(-8, 8), -rr(3, 7) * u, rr(0.28, 0.5), rr(0.3, 0.6) * u, w.hue ?? 28, u);
         }
         if (t > 0.18 && w.gen < 2 && Math.random() < dt * 2.2) {
           const nb = words[i + (Math.random() < 0.5 ? -1 : 1)];
-          if (nb && nb.burn < 0 && Math.abs(nb.y - w.y) < w.size * 0.5) this.ignite(nb, w.gen + 1, world);
+          if (nb && nb.burn < 0 && Math.abs(nb.y - w.y) < w.size * 0.5) this.ignite(nb, w.gen + 1, world, false, w.hue);
         }
       } else if (t >= T_FLAME + T_CHAR && !w.ashed) {
         w.ashed = true;
         const n = Math.ceil(w.w / 7);
         for (let k = 0; k < n; k++) P.ash(w.x + Math.random() * w.w, w.y - w.size * rr(0.1, 0.6), u);
-        for (let k = 0; k < 3; k++) P.ember(w.x + Math.random() * w.w, w.y - w.size * 0.3, rr(-12, 12), -rr(2, 5) * u, rr(1.2, 2.6), 28, u);
+        for (let k = 0; k < 3; k++) P.ember(w.x + Math.random() * w.w, w.y - w.size * 0.3, rr(-12, 12), -rr(2, 5) * u, rr(1.2, 2.6), w.hue ?? 28, u);
         for (let k = 0; k < 2; k++) P.smoke(w.x + Math.random() * w.w, w.y - w.size * 0.4, rr(-6, 6), -rr(2, 4) * u, rr(1.2, 2), rr(0.9, 1.6) * u);
       }
     }
   }
 
-  ignite(w, gen, world, fromPaper = false) {
+  ignite(w, gen, world, fromPaper = false, hue = 28) {
     if (w.burn >= 0) return;
+    w.hue = hue; world.stats.words++;
     w.burn = 0; w.ashed = false; w.fx = 0; w.gen = gen || 0;
-    if (!fromPaper && world.paper) world.paper.igniteArea(w.x + w.w / 2, w.y - w.size * 0.3, w.w * 0.5 + w.size * 0.5, 0.78);
+    if (!fromPaper && world.paper) world.paper.igniteArea(w.x + w.w / 2, w.y - w.size * 0.3, w.w * 0.5 + w.size * 0.5, 0.78, hue);
     
   }
 
@@ -191,7 +192,7 @@ export class Page {
   hit(q, world) {
     const arr = this.hash.get(((q.x / 48) | 0) * 4096 + ((q.y / 48) | 0));
     if (arr) for (const w of arr) {
-      if (w.burn < 0 && q.x > w.x - 2 && q.x < w.x + w.w + 2 && q.y > w.y - w.size * 0.95 && q.y < w.y + w.size * 0.3) this.ignite(w, 0, world);
+      if (w.burn < 0 && q.x > w.x - 2 && q.x < w.x + w.w + 2 && q.y > w.y - w.size * 0.95 && q.y < w.y + w.size * 0.3) this.ignite(w, 0, world, false, q.hue);
     }
   }
 

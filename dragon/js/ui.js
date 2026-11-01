@@ -41,6 +41,12 @@ const CSS = `
 .chip[aria-pressed=true]{box-shadow:0 0 0 2px var(--uiBg),0 0 0 3.5px var(--ui)}
 .chip .lead{position:absolute;right:-1px;top:-1px;width:12px;height:12px;display:grid;place-items:center;border-radius:50%;background:var(--ui);color:var(--uiBg)}
 .chip .lead svg{width:8px;height:8px;stroke-width:1.8}
+.tally{position:fixed;z-index:20;left:16px;top:16px;display:flex;align-items:center;gap:7px;padding:7px 11px 7px 9px;background:var(--uiBg);border:1px solid var(--uiLine);border-radius:999px;font:500 12px/1 var(--sans);color:var(--ui);opacity:0;transform:translateY(-6px);transition:opacity .3s,transform .3s;pointer-events:none}
+.tally.on{opacity:1;transform:none}
+.tally svg{width:13px;height:13px;color:var(--uiAccent)}
+.tally b{font:500 12px var(--mono);font-variant-numeric:tabular-nums}
+.tally.pop b{animation:pop .25s}
+@keyframes pop{50%{transform:scale(1.35)}}
 .tool{width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:10px;background:none;color:var(--uiMuted);padding:0;position:relative;transition:background .12s,color .12s,transform .12s}
 .tool svg{width:18px;height:18px}
 .tool:hover:not(:disabled){background:var(--uiHover);color:var(--ui)}
@@ -117,10 +123,22 @@ export class Panel {
     this.build();
     world.on(type => {
       if (type === 'theme') this.theming();
+      if (type === 'frame') this.count();
       if (type === 'dragons' || type === 'select' || type === 'leader') { this.dock(); this.head(); this.sync(); }
     });
+    this.tally = el('div', { class: 'tally hud', 'aria-live': 'polite', html: icon('flame') + '<span>Burnt</span><b>0</b>' });
+    document.body.append(this.tally); this.lastTally = 0;
     this.theming();
     this.saveSoon = (() => { let t; return () => { clearTimeout(t); t = setTimeout(() => Store.save(world), 300); }; })();
+  }
+
+  /** The burn tally: words and moths set alight. Appears with the first one. */
+  count() {
+    const n = this.world.stats.words + this.world.stats.moths;
+    if (n === this.lastTally) return;
+    this.lastTally = n; this.tally.classList.toggle('on', n > 0);
+    const b = this.tally.querySelector('b'); b.textContent = n;
+    this.tally.classList.remove('pop'); void this.tally.offsetWidth; this.tally.classList.add('pop');
   }
 
   get d() { return this.world.selected; }

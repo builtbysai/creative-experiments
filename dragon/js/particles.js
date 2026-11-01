@@ -36,7 +36,7 @@ export function flameSprites(hue) {
     const ramp = [];
     for (let i = 0; i < RAMP; i++) {
       const t = 1 - i / (RAMP - 1);
-      ramp.push(blob([[0, c(t, 1)], [0.3, c(t, 0.9)], [0.6, c(t - 0.22, 0.42)], [1, c(t - 0.4, 0)]]));
+      ramp.push(blob([[0, c(t, 0.95)], [0.22, c(t, 0.72)], [0.55, c(t - 0.22, 0.26)], [1, c(t - 0.4, 0)]]));
     }
     s = {
       ramp,

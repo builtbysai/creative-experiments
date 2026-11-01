@@ -12,7 +12,8 @@
 // (marching squares into a Path2D per tile, with the desk showing through, an inner shadow and a charred rim),
 // and light thrown on the page by the flames.
 
-import { clamp, lerp, sstep, rr, fbm, noise2, rgbOf } from './util.js';
+import { clamp, lerp, sstep, rr, fbm, noise2, rgbOf, hsl } from './util.js';
+import { flameSprites } from './particles.js';
 
 const INTACT = 0, FLAME = 1, CHAR = 2, HOLE = 3, MEND = 4, PATCH = 5;
 const TILE = 12;                      // cells per tile side (for the hole paths)
@@ -20,6 +21,15 @@ const CS = 4;                         // coarse cells per scorch/light cell
 const K_SPREAD = 6.5;                  // how quickly a flame warms its neighbours
 const DECAY = 0.86;                  // energy kept at each hop
 const E_MIN = 0.4;                    // below this a flame cannot light its neighbours
+
+const H8 = h => Math.round((((h % 360) + 360) % 360) / 360 * 255);          // a hue stored in one byte
+const hueCache = new Map();
+/** The four colours of a flame front for a base hue: white-hot, bright, deep, dying. */
+function flameKeys(h8) {
+  let k = hueCache.get(h8);
+  if (!k) { const h = h8 / 255 * 360; k = [hsl(h + 22, 1, 0.87), hsl(h + 8, 1, 0.58), hsl(h - 4, 1, 0.4), hsl(h - 8, 1, 0.26)].map(rgbOf); hueCache.set(h8, k); }
+  return k;
+}
 
 const fract = x => x - Math.floor(x);
 const hashI = i => fract(Math.sin(i * 12.9898) * 43758.5453);
@@ -49,11 +59,11 @@ export class Paper {
     this.st = new Uint8Array(n); this.kind = new Uint8Array(n);
     this.heat = new Float32Array(n); this.heatT = new Float32Array(n); this.en = new Float32Array(n);
     this.t = new Float32Array(n); this.dur = new Float32Array(n); this.c = new Float32Array(n); this.mendAt = new Float32Array(n);
-    this.dry = new Float32Array(n);
+    this.dry = new Float32Array(n); this.hue = new Uint8Array(n).fill(H8(28)); this.hotH = null;
     for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
       const x = i * cs, y = j * cs;
       // fibre-scale noise on top of broad damp patches
-      let d = 0.62 + 0.75 * fbm(x / 70, y / 70, 3, 3) + 0.25 * (noise2(x / 5, y / 5, 9) - 0.5);
+      let d = 0.7 + 0.6 * fbm(x / 70, y / 70, 3, 3) + 0.08 * (noise2(x / 5, y / 5, 9) - 0.5);
       const damp = fbm(x / 190 + 40, y / 190, 7, 3);
       if (damp < 0.34) d *= 0.35 + 1.9 * damp;
       this.dry[j * cols + i] = clamp(d, 0.12, 1.5);
@@ -68,7 +78,7 @@ export class Paper {
     this.tileDirty = new Uint8Array(this.tcols * this.trows); this.dirtyList = [];
     // coarse maps
     this.cw = Math.ceil(cols / CS); this.ch = Math.ceil(rows / CS);
-    this.scorch = new Float32Array(this.cw * this.ch); this.hot = new Float32Array(this.cw * this.ch); this.hotShown = new Float32Array(this.cw * this.ch);
+    this.hotH = new Uint8Array(this.cw * this.ch).fill(H8(28)); this.scorch = new Float32Array(this.cw * this.ch); this.hot = new Float32Array(this.cw * this.ch); this.hotShown = new Float32Array(this.cw * this.ch);
     this.cellC = document.createElement('canvas'); this.cellC.width = cols * 2; this.cellC.height = rows * 2;
     this.cellCtx = this.cellC.getContext('2d'); this.cellImg = this.cellCtx.createImageData(cols * 2, rows * 2);
     this.cell32 = new Uint32Array(this.cellImg.data.buffer);
@@ -99,8 +109,9 @@ export class Paper {
   cellAt(x, y) { const i = (x / this.cs) | 0, j = (y / this.cs) | 0; return i < 0 || j < 0 || i >= this.cols || j >= this.rows ? -1 : j * this.cols + i; }
 
   /** Soak a cell in heat; ignite it when it has had enough. `e` is the energy the fire there will carry. */
-  _heat(i, amount, e) {
+  _heat(i, amount, e, h = 28) {
     if (this.st[i] !== INTACT) return;
+    if (amount > 0) this.hue[i] = h;
     const dt = this.now - this.heatT[i];
     if (dt > 0) this.heat[i] *= Math.exp(-dt * 0.7);
     this.heatT[i] = this.now;
@@ -113,28 +124,29 @@ export class Paper {
     if (this.st[i] !== INTACT || !this.enabled) return;
     const d = this.dry[i];
     this.st[i] = FLAME; this.t[i] = 0; this.en[i] = e;
-    this.dur[i] = (0.26 + 0.5 * clamp(d, 0.3, 1.3)) * (0.75 + 0.5 * Math.random());
+    this.dur[i] = (0.16 + 0.34 * clamp(d, 0.3, 1.3)) * (0.75 + 0.5 * Math.random());
     const ci = i % this.cols, cj = (i / this.cols) | 0;
-    this.kind[i] = (e * (0.5 + 0.5 * d) + (fbm(ci * this.cs / 30, cj * this.cs / 30, 21, 3) - 0.5) * 1.0 + (Math.random() - 0.5) * 0.18 > 0.92) ? 1 : 0;
+    this.kind[i] = (e * (0.5 + 0.5 * d) + (fbm(ci * this.cs / 46, cj * this.cs / 46, 21, 3) - 0.5) * 1.3 + (Math.random() - 0.5) * 0.08 > 0.93) ? 1 : 0;
     this._add(i); this.stats.ignitions++;
   }
 
   /** The dragon's breath, a burning word, anything hot at a point. `power` is heat per second. */
-  burnAt(x, y, dt, power = 26, energy = 1) {
+  burnAt(x, y, dt, power = 26, energy = 1, hue = 28) {
     if (!this.enabled) return;
     const i = this.cellAt(x, y); if (i < 0) return;
     const cols = this.cols;
-    this._heat(i, dt * power * this.dry[i], energy);
-    for (const o of [-1, 1, -cols, cols]) { const k = i + o; if (k >= 0 && k < this.st.length) this._heat(k, dt * power * 0.3 * this.dry[k], energy * 0.9); }
+    const h8 = H8(hue);
+    this._heat(i, dt * power * this.dry[i], energy, h8);
+    for (const o of [-1, 1, -cols, cols]) { const k = i + o; if (k >= 0 && k < this.st.length) this._heat(k, dt * power * 0.3 * this.dry[k], energy * 0.9, h8); }
   }
 
   /** Set light to a whole patch at once (a word catching fire). */
-  igniteArea(x, y, r, energy = 0.8) {
+  igniteArea(x, y, r, energy = 0.8, hue = 28) {
     if (!this.enabled) return;
     const cs = this.cs, i0 = Math.floor((x - r) / cs), i1 = Math.floor((x + r) / cs), j0 = Math.floor((y - r) / cs), j1 = Math.floor((y + r) / cs);
     for (let j = Math.max(0, j0); j <= Math.min(this.rows - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(this.cols - 1, i1); i++) {
       const dx = (i + 0.5) * cs - x, dy = (j + 0.5) * cs - y;
-      if (dx * dx + dy * dy < r * r && Math.random() < 0.45) this._heat(j * this.cols + i, 1.2, energy);
+      if (dx * dx + dy * dy < r * r && Math.random() < 0.45) this._heat(j * this.cols + i, 1.2, energy, H8(hue));
     }
   }
 
@@ -152,6 +164,7 @@ export class Paper {
   }
   holeAt(x, y) { const i = this.cellAt(x, y); if (i < 0) return 0; const s = this.st[i]; return (s === HOLE || s === MEND) && this.kind[i] ? this.c[i] : 0; }
   stateAt(x, y) { const i = this.cellAt(x, y); return i < 0 ? INTACT : this.st[i]; }
+  hueAt(x, y) { const i = this.cellAt(x, y); return i < 0 ? 28 : this.hue[i] / 255 * 360; }
   flameAt(x, y) { return this.stateAt(x, y) === FLAME; }
   /** Local hotness 0..1 from flames in the surrounding coarse cell. */
   hotAt(x, y) { const i = Math.floor(x / (this.cs * CS)), j = Math.floor(y / (this.cs * CS)); return i < 0 || j < 0 || i >= this.cw || j >= this.ch ? 0 : this.hotShown[j * this.cw + i]; }
@@ -174,7 +187,7 @@ export class Paper {
         // a flame burns brightest in the middle of its life
         const e = en[i] * (0.55 + 0.45 * Math.sin(clamp(u, 0, 1) * Math.PI));
         const ci = i % cols, cj = (i / cols) | 0;
-        this.hot[((cj / CS) | 0) * cw + ((ci / CS) | 0)] += 1 - 0.6 * u;
+        { const hc = ((cj / CS) | 0) * cw + ((ci / CS) | 0); this.hot[hc] += 1 - 0.6 * u; this.hotH[hc] = this.hue[i]; }
         if (e > E_MIN && u < 0.9) {
           const rate = dt * K_SPREAD * e, ne = en[i] * DECAY;
           for (let dj = -1; dj <= 1; dj++) {
@@ -183,7 +196,7 @@ export class Paper {
               if (!di && !dj) continue;
               const x = ci + di; if (x < 0 || x >= cols) continue;
               const k = y * cols + x;
-              if (st[k] === INTACT) this._heat(k, rate * dry[k] * (di && dj ? 0.72 : 1), ne);
+              if (st[k] === INTACT) this._heat(k, rate * dry[k] * (di && dj ? 0.72 : 1), ne, this.hue[i]);
             }
           }
         }
@@ -234,7 +247,7 @@ export class Paper {
     for (let k = rate(0, clamp(fl * 0.3, 0, 42)); k > 0; k--) {
       const i = pick(FLAME); if (i < 0) break;
       const x = (i % cols + Math.random()) * cs, y = (((i / cols) | 0) + Math.random()) * cs;
-      p.flame(x, y, rr(-6, 6), -rr(6, 16), rr(0.25, 0.55), rr(5, 10), 28, u);
+      p.flame(x, y, rr(-6, 6), -rr(6, 16), rr(0.25, 0.55), rr(5, 10), this.hue[i] / 255 * 360, u);
     }
     for (let k = rate(1, clamp(fl * 0.03 + ch * 0.008, 0, 9)); k > 0; k--) {
       const i = pick(Math.random() < 0.6 ? FLAME : CHAR); if (i < 0) break;
@@ -242,11 +255,11 @@ export class Paper {
     }
     for (let k = rate(2, clamp(fl * 0.012, 0, 4)); k > 0; k--) {
       const i = pick(FLAME); if (i < 0) break;
-      p.spark((i % cols + 0.5) * cs, (((i / cols) | 0) + 0.5) * cs, rr(-40, 40), -rr(20, 80), rr(0.4, 0.9), 28, u);
+      p.spark((i % cols + 0.5) * cs, (((i / cols) | 0) + 0.5) * cs, rr(-40, 40), -rr(20, 80), rr(0.4, 0.9), this.hue[i] / 255 * 360, u);
     }
     for (let k = rate(3, clamp(ch * 0.006, 0, 3)); k > 0; k--) {
       const i = pick(CHAR); if (i < 0) break;
-      p.ember((i % cols + 0.5) * cs, (((i / cols) | 0) + 0.5) * cs, rr(-10, 10), -rr(6, 18), rr(1.2, 2.8), 28, u);
+      p.ember((i % cols + 0.5) * cs, (((i / cols) | 0) + 0.5) * cs, rr(-10, 10), -rr(6, 18), rr(1.2, 2.8), this.hue[i] / 255 * 360, u);
     }
     // ash flakes where a hole has just fallen through
     if (this.stats.newHoles) for (let k = Math.min(2, this.stats.newHoles); k > 0; k--) {
@@ -262,15 +275,15 @@ export class Paper {
     const pack = (r, g, b, a) => ((a & 255) << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
     const fl = 0.7 + 0.3 * Math.sin(frame * 0.5 + i * 0.37) * Math.sin(frame * 0.31 + i * 0.11);
     if (s === FLAME) {
-      const k = clamp(u / this.dur[i], 0, 1);
-      if (k < 0.16) { const m = k / 0.16; return pack(lerp(255, 255, m), lerp(246, 170, m) * fl + 40 * (1 - fl), lerp(190, 40, m), 255); }
-      if (k < 0.42) { const m = (k - 0.16) / 0.26; return pack(lerp(255, 170, m) * fl, lerp(150, 34, m) * fl, lerp(36, 10, m), 255); }
+      const k = clamp(u / this.dur[i], 0, 1), [c0, c1, c2, c3] = flameKeys(this.hue[i]);
+      if (k < 0.16) { const m = k / 0.16; return pack(lerp(c0[0], c1[0], m), (lerp(c0[1], c1[1], m)) * fl + 40 * (1 - fl), lerp(c0[2], c1[2], m), 200); }
+      if (k < 0.42) { const m = (k - 0.16) / 0.26; return pack(lerp(c1[0], c2[0], m) * fl, lerp(c1[1], c2[1], m) * fl, lerp(c1[2], c2[2], m), 190); }
       const m = (k - 0.42) / 0.58;
-      return pack(lerp(130, ch[0], m) * (0.7 + 0.3 * fl), lerp(28, ch[1], m), lerp(10, ch[2], m), 255);
+      return pack(lerp(c3[0], ch[0], m) * (0.7 + 0.3 * fl), lerp(c3[1], ch[1], m), lerp(c3[2], ch[2], m), 230);
     }
     if (s === CHAR) {
       // newly burnt paper is brown, then blackens; some cells smoulder with a red core that fades
-      const k = clamp(u / this.dur[i], 0, 1), nz = 0.82 + 0.36 * hashI(i + 3.1);
+      const k = clamp(u / this.dur[i], 0, 1), nz = 0.93 + 0.14 * hashI(i + 3.1);
       const brown = 1 - sstep(0, 0.32, k), glowy = hashI(i) > 0.55 ? Math.pow(1 - k, 2) * fl : 0, g = glowy * 0.9;
       const r = lerp(ch[0], sc[0] * 0.7, brown) * nz, gg = lerp(ch[1], sc[1] * 0.6, brown) * nz, b = lerp(ch[2], sc[2] * 0.5, brown) * nz;
       return pack(lerp(r, 255, g), lerp(gg, 90, g), lerp(b, 20, g), 255);
@@ -323,7 +336,9 @@ export class Paper {
       }
     }
     this.cellCtx.putImageData(this.cellImg, 0, 0);
+    g.filter = 'blur(1.2px)';                      // soften the cell grid into fibre-like edges
     g.drawImage(this.cellC, 0, 0, this.cols * cs, this.rows * cs);
+    g.filter = 'none';
     // 3. holes
     this.drawHoles(g, theme);
     g.restore();
@@ -428,15 +443,15 @@ export class Paper {
   /** Light the flames throw on the page: a warm bloom per busy tile. */
   drawGlow(g, theme, frame) {
     if (!this.cols || this.stats.flame < 1) return;
-    const hs = this.hotShown, cw = this.cw, size = this.cs * CS * 3.2;
+    const hs = this.hotShown, cw = this.cw, size = this.cs * CS * 2.4;
     g.save();
     g.globalCompositeOperation = theme.dark ? 'lighter' : 'source-over';
     const flick = 0.85 + 0.15 * Math.sin(frame * 0.9) * Math.sin(frame * 0.57);
     for (let j = 0; j < this.ch; j++) for (let i = 0; i < cw; i++) {
       const v = hs[j * cw + i]; if (v < 0.04) continue;
       const x = (i + 0.5) * this.cs * CS, y = (j + 0.5) * this.cs * CS;
-      g.globalAlpha = Math.min(1, v) * (theme.dark ? 0.55 : 0.32) * flick;
-      g.drawImage(this.glow, x - size, y - size, size * 2, size * 2);
+      g.globalAlpha = Math.min(1, v) * (theme.dark ? 0.32 : 0.26) * flick;
+      g.drawImage(flameSprites(this.hotH[j * cw + i] / 255 * 360).glow, x - size, y - size, size * 2, size * 2);
     }
     g.restore();
   }
