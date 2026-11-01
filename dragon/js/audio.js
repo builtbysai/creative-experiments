@@ -14,6 +14,7 @@
 // roar and thumps pan with the dragon. Sound starts on the first pointer press (browser rule) and can be muted.
 
 import { clamp } from './util.js';
+import { Ambience } from './music.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 
@@ -74,6 +75,34 @@ export class Sound {
     this.bedG = c.createGain(); this.bedG.gain.value = 0;
     const bedLp = c.createBiquadFilter(); bedLp.type = 'lowpass'; bedLp.frequency.value = 520;
     loop(this.brown, 1.4).connect(bedLp); bedLp.connect(this.bedG); this.bedG.connect(this.bus);
+    this.amb = new Ambience(this);
+  }
+
+  get musicOn() { return this.amb ? this.amb.on : (() => { try { return localStorage.getItem('draco.music') !== '0'; } catch (_) { return true; } })(); }
+  setMusic(v) { if (this.amb) this.amb.setOn(v); else try { localStorage.setItem('draco.music', v ? '1' : '0'); } catch (_) {} }
+
+  /** A footfall: a papery tap on the page, a rustle in the grass, a soft pat in the wet. `k` is the dragon's size 0..1. */
+  step(surface = 'paper', k = 1, pan = 0) {
+    const c = this.ctx; if (!c || this.muted) return;
+    const t = c.currentTime, s = c.createBufferSource(), bp = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = this.white; bp.type = 'bandpass';
+    const grass = surface === 'grass', wet = surface === 'wet';
+    bp.frequency.value = grass ? rnd(3200, 5200) : wet ? rnd(450, 700) : rnd(700, 1100); bp.Q.value = grass ? 0.7 : 1.1;
+    const d = grass ? 0.11 : wet ? 0.07 : 0.05, lv = (grass ? 0.05 : wet ? 0.08 : 0.07) * (0.5 + 0.5 * k) * rnd(0.8, 1.15);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(lv, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0005, t + d);
+    let out = g; if (c.createStereoPanner) { const p = c.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); g.connect(p); out = p; }
+    s.connect(bp); bp.connect(g); out.connect(this.bus); s.start(t, rnd(0, 2.5), d + 0.02);
+    if (!grass) { const o = c.createOscillator(), og = c.createGain(); o.frequency.setValueAtTime(rnd(110, 150), t); o.frequency.exponentialRampToValueAtTime(55, t + 0.09); og.gain.setValueAtTime(0.1 * k, t); og.gain.exponentialRampToValueAtTime(0.0005, t + 0.11); o.connect(og); og.connect(out === g ? this.bus : out); o.start(t); o.stop(t + 0.12); }
+  }
+
+  /** One downstroke of a wing: a soft low whoosh. */
+  flap(k = 1, pan = 0) {
+    const c = this.ctx; if (!c || this.muted) return;
+    const t = c.currentTime, s = c.createBufferSource(), lp = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = this.white; lp.type = 'lowpass'; lp.frequency.setValueAtTime(900, t); lp.frequency.exponentialRampToValueAtTime(160, t + 0.32);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.1 * k, t + 0.07); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.36);
+    let out = g; if (c.createStereoPanner) { const p = c.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); g.connect(p); out = p; }
+    s.connect(lp); lp.connect(g); out.connect(this.bus); out.connect(this.send); s.start(t, rnd(0, 2.5), 0.4);
   }
 
   /** A short decaying-noise impulse response for a small, soft room. */
@@ -157,6 +186,7 @@ export class Sound {
       let n = 0; while (this.crackAcc >= 1 && n < 3) { this.crackAcc -= 1; this.crackle(0.5 + burn, s.x || 0); n++; }
       this.crackAcc = Math.min(this.crackAcc, 1.5);
       if (s.pops > 0) this.thump(clamp(0.5 + s.pops * 0.25, 0.5, 1.2), s.x || 0);
+      if (this.amb) this.amb.update(dt, s);
     }
     // haptics: a thud as the breath starts, a low rumble while it lasts, a tick for each hole
     if (this.haptics) {

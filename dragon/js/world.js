@@ -212,10 +212,24 @@ export class World {
 
     let breath = 0, bx = 0; for (const d of this.dragons) if (d.breath > breath) { breath = d.breath; bx = d.headPos.x; }
     const pops = this.paper.stats.newHoles;
-    this.sound.update(dt, { breath, flame: this.paper.stats.flame, pops: this.paper.stats.newHoles, x: this.W ? clamp(bx / this.W * 2 - 1, -1, 1) : 0 });
+    const wx = this.sceneName === 'weather' ? this.sceneCache.weather : null;
+    this.sound.update(dt, { breath, flame: this.paper.stats.flame, pops: this.paper.stats.newHoles, x: this.W ? clamp(bx / this.W * 2 - 1, -1, 1) : 0,
+      scene: this.sceneName, dark: this.theme.dark, rain: wx ? wx.rainK : 0, wind: wx ? Math.hypot(wx.windX, wx.windY) : 0, fog: wx ? wx.fogK : 0 });
+    this.footsteps();
     this.shake = Math.max(this.shake * Math.exp(-dt * 6), breath * 0.9 + Math.min(2, pops * 0.35));
     this.paper.stats.ignitions = 0;
     this.emit('frame');
+  }
+
+  /** Footfalls and wingbeats, as sounds: a foot that stops swinging has just been planted; a wing crossing mid-stroke has just beaten. */
+  footsteps() {
+    const snd = this.sound; if (!snd.ctx || snd.muted) return;
+    const surf = this.sceneName === 'garden' ? 'grass' : this.sceneName === 'weather' && this.weatherMode === 'rain' ? 'wet' : 'paper';
+    for (const d of this.dragons.concat(this.leavers)) {
+      const pan = clamp(d.x / this.W * 2 - 1, -1, 1), k = clamp(d.L / 640, 0.3, 1), flying = !!d.leave;
+      for (const l of d.legs) { const sw = !!l.sw; if (l._sw && !sw && !flying && this.time - (this._lastStep || 0) > 0.045) { snd.step(surf, k, pan); this._lastStep = this.time; } l._sw = sw; }
+      const s = Math.sin(d.wphase); if (d.wing > 0.45 && d._ws < 0 && s >= 0) snd.flap(clamp(d.wing, 0, 1) * k, pan); d._ws = s;
+    }
   }
 
   /** The hot breath particles as {x, y, r, p} (radius, power), for a backdrop to burn, melt or boil with. */

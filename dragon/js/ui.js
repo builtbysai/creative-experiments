@@ -24,6 +24,7 @@ const I = {
   restore: '<path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v3h3"/>',
   plus: '<path d="M8 3v10M3 8h10"/>',
   close: '<path d="M4 4l8 8M12 4l-8 8"/>',
+  music: '<path d="M6 12.5V3.5l7-1.5v9"/><circle cx="4.4" cy="12.5" r="1.6"/><circle cx="11.4" cy="11" r="1.6"/>',
   scene: '<path d="M1.5 13.5l4.2-6.5 2.8 4 2-2.8 4 5.3z"/><circle cx="11.5" cy="4" r="1.6"/>',
   crown: '<path d="M2.5 11.5l-.5-6 3.2 2.5L8 4l2.8 4 3.2-2.5-.5 6z"/>'
 };
@@ -117,7 +118,7 @@ input[type=range]:active::-webkit-slider-thumb{transform:scale(1.2)}
   #dock .sep{display:none}
   .herd{flex-basis:100%;justify-content:center;margin-bottom:2px}
   #scenes{bottom:118px}
-  .chip{width:32px;height:32px}.tool{width:34px;height:34px}
+  .chip{width:32px;height:32px}.tool{width:32px;height:32px}
   #editor{top:auto;left:8px;right:8px;bottom:70px;width:auto;height:min(54vh,460px);transform:translateY(calc(100% + 90px))}
   input[type=range]{height:30px}
 }
@@ -214,6 +215,7 @@ export class Panel {
     toggle('paper', 'flame', 'Fire burns the page', () => w.paperOn, v => { w.paperOn = v; });
     const snd = toggle('sound', 'sound', 'Sound', () => !w.sound.muted, v => { w.sound.unlock(); w.sound.setMuted(!v); snd.innerHTML = icon(v ? 'sound' : 'mute'); if (v) w.sound.blip(true); });
     snd.innerHTML = icon(w.sound.muted ? 'mute' : 'sound');
+    toggle('music', 'music', 'Music', () => w.sound.musicOn, v => { w.sound.unlock(); w.sound.setMusic(v); if (!w.sound.muted) w.sound.blip(v); });
     tool('theme', 'sun', 'Light or dark', () => w.setThemeMode(w.theme.dark ? 'light' : 'dark'));
     tool('restore', 'restore', 'Mend the page', () => w.restorePage());
     this.dockEl.append(el('span', { class: 'sep' }));
@@ -244,7 +246,7 @@ export class Panel {
       el('header', {}, this.title, close), this.swEl, this.tabsEl, this.pane, this.foot);
     // background picker: a small card above the dock
     this.scnRow = el('div', { class: 'scn', role: 'group', 'aria-label': 'Background' });
-    for (const [id, label] of [['paper', 'Paper'], ['garden', 'Garden'], ['weather', 'Weather']]) this.scnRow.append(el('button', { type: 'button', 'data-s': id, 'aria-pressed': 'false', onclick: () => w.setScene(id) }, el('i', { class: id }), label));
+    for (const [id, label] of [['paper', 'Paper'], ['garden', 'Garden'], ['weather', 'Weather']]) this.scnRow.append(el('button', { type: 'button', 'data-s': id, 'aria-pressed': 'false', onclick: () => { w.sound.unlock(); if (!w.sound.muted) w.sound.blip(true); w.setScene(id); } }, el('i', { class: id }), label));
     this.wxRow = el('div', { class: 'seg', role: 'group', 'aria-label': 'Weather' });
     for (const [id, label] of [['rain', 'Rain'], ['wind', 'Wind'], ['fog', 'Fog']]) this.wxRow.append(el('button', { type: 'button', 'data-w': id, 'aria-pressed': 'false', text: label, onclick: () => w.setWeather(id) }));
     this.menuEl = el('div', { id: 'scenes', class: 'hud', role: 'dialog', 'aria-label': 'Background' }, el('h3', { text: 'Background' }), this.scnRow, el('div', { class: 'wx' }, el('small', { text: 'Weather' }), this.wxRow));

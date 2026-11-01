@@ -12,6 +12,7 @@ No build step, no dependencies, no sprites: ES modules and a 2D canvas.
 ## Use it
 
 - Move the pointer: the leader walks toward it and looks. Hold: fire. Other dragons flock behind in a loose V.
+- Music and sound (`music.js`, `audio.js`): a quiet generative score (slow pad plus soft bells) in a different key for paper, garden day, garden night and weather; birdsong by day and crickets at night in the garden; rain, gusting wind and distant thunder in the weather; fog muffles the score. The score ducks while a dragon breathes. Footsteps change with the ground (paper, grass, wet) and big wingbeats whoosh. Music has its own toggle (remembered).
 - Background picker (dock): the paper page, a **garden** (grass bends under the body and springs back, fire leaves ash,
   flowers regrow, bees and butterflies by day, fireflies at night) or **weather** (rain that sizzles on scorched paper,
   wind that carries smoke and bends the flame, fog that parts around the dragons). `?scene=garden|weather` picks one.
