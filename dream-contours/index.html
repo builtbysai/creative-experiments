@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dream Contours · Creative Experiments</title>
+<meta name="description" content="A topographic dream that never settles. Domain-warped contour bands drift through a psychedelic palette; the edges glitch in red and blue. Drag to stir it.">
+<meta name="theme-color" content="#0d0d10">
+<style>
+@font-face {
+  font-family: 'Fraunces'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('../assets/fonts/Fraunces-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fraunces'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('../assets/fonts/Fraunces-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Plex Mono'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('../assets/fonts/IBMPlexMono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Plex Mono'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('../assets/fonts/IBMPlexMono-500.woff2') format('woff2');
+}
+:root {
+  --wall: #0d0d10;
+  --wall-deep: #08080a;
+  --ink: #ece7db;
+  --ink-soft: #a39d8e;
+  --rule: #26262b;
+  --gold: #d9a441;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--wall);
+  color: var(--ink);
+  font-family: 'Fraunces', Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--gold); color: #0d0d10; }
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50; opacity: .5;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E");
+}
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+.mono { font-family: 'Plex Mono', ui-monospace, monospace; }
+a { color: inherit; }
+
+header.book { padding: 56px 0 36px; border-bottom: 1px solid var(--rule); }
+.back { display: inline-block; font-family: 'Plex Mono', monospace; font-size: 12px;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--ink-soft);
+  text-decoration: none; margin-bottom: 28px; }
+.back:hover { color: var(--gold); }
+.kicker { font-family: 'Plex Mono', monospace; font-size: 12px; letter-spacing: .32em;
+  text-transform: uppercase; color: var(--gold); margin: 0 0 18px; }
+h1.title { font-size: clamp(40px, 6vw, 68px); font-weight: 600; line-height: 1.02;
+  margin: 0 0 18px; letter-spacing: -0.01em; }
+p.lede { font-size: 19px; line-height: 1.55; color: var(--ink-soft); max-width: 62ch; margin: 0; }
+p.lede strong { color: var(--ink); font-weight: 600; }
+
+section.study { padding: 56px 0; border-bottom: 1px solid var(--rule); }
+.stage { position: relative; border: 1px solid var(--rule); background: var(--wall-deep);
+  max-width: 660px; margin: 0 auto; }
+.stage canvas { display: block; width: 100%; height: auto; aspect-ratio: 3 / 4;
+  touch-action: none; cursor: crosshair; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; align-items: center;
+  max-width: 660px; margin-left: auto; margin-right: auto; }
+button.act {
+  font-family: 'Plex Mono', monospace; font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+  background: transparent; color: var(--ink); border: 1px solid var(--rule);
+  padding: 12px 22px; cursor: pointer; transition: border-color .2s, color .2s;
+}
+button.act:hover { border-color: var(--gold); color: var(--gold); }
+button.act:active { transform: translateY(1px); }
+.seedline { font-family: 'Plex Mono', monospace; font-size: 12px; color: var(--ink-soft); }
+.hintline { font-family: 'Plex Mono', monospace; font-size: 12px; color: var(--ink-soft);
+  opacity: .7; max-width: 660px; margin: 14px auto 0; }
+
+.ref-grid { display: grid; grid-template-columns: 1fr; gap: 18px; margin-top: 26px; max-width: 660px; }
+.ref-grid figure { margin: 0; border: 1px solid var(--rule); background: var(--wall-deep); }
+.ref-grid img { display: block; width: 100%; height: auto; }
+.ref-grid figcaption { font-family: 'Plex Mono', monospace; font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-soft); padding: 10px 12px; border-top: 1px solid var(--rule); }
+
+footer.colo { padding: 40px 0 64px; color: var(--ink-soft); font-size: 14px; }
+footer.colo a { color: var(--ink-soft); }
+footer.colo a:hover { color: var(--gold); }
+</style>
+</head>
+<body>
+
+<header class="book">
+  <div class="wrap">
+    <a class="back" href="../">&larr; The sketchbook</a>
+    <p class="kicker">Creative Experiments &middot; № 08</p>
+    <h1 class="title">Dream Contours</h1>
+    <p class="lede">A topographic dream that never settles. A warped noise field is sliced into psychedelic contour bands; the edges glitch red and blue. <strong>Drag to stir it</strong> &mdash; tap to dream again.</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="study" id="piece">
+    <div class="stage">
+      <canvas id="dream" width="660" height="880" aria-label="Dream Contours: drifting psychedelic contour bands with glitching edges"></canvas>
+    </div>
+    <div class="controls">
+      <button class="act" id="dreamBtn" type="button">Dream again</button>
+      <span class="seedline mono" id="seedLine"></span>
+    </div>
+    <p class="hintline">drag to stir the field &middot; tap for a new dream</p>
+  </section>
+
+  <section class="study" id="reference">
+    <div class="ref-grid">
+      <figure>
+        <img src="reference/dream-contours-original.png" alt="Dream Contours reference: the original contour image Hans uploaded" loading="lazy">
+        <figcaption>The original &mdash; uploaded by Hans, 1 Nov 2026</figcaption>
+      </figure>
+    </div>
+  </section>
+
+</main>
+
+<footer class="colo">
+  <div class="wrap">
+    <p><a href="../">&larr; Back to the sketchbook</a> &middot; Dream Contours, drawn in code. Kept by <a href="https://github.com/builtbysai">Hans</a>.</p>
+  </div>
+</footer>
+
+<script>
+'use strict';
+/* Dream Contours — a topographic dream.
+ * Driver: a domain-warped fbm scalar field, quantized into contour bands.
+ * The bands drift on their own; drag stirs a vortex into the warp;
+ * tap reseeds. Band edges shed RGB-split glitch shards.
+ */
+const cv = document.getElementById('dream');
+const ctx = cv.getContext('2d');
+const FW = 264, FH = 352;                 // field resolution
+const off = document.createElement('canvas');
+off.width = FW; off.height = FH;
+const octx = off.getContext('2d');
+const img = octx.createImageData(FW, FH);
+const bands = new Int8Array(FW * FH);
+
+// palettes: outer -> inner (sampled from the original)
+const PALETTES = [
+  ['#a8122b','#cf1b57','#c2187b','#8e24aa','#5e35b1','#2b5fd9','#1b9aaa','#35a06f','#f4842b','#f7c948'],
+  ['#7b1fa2','#ab47bc','#e0218a','#d81b60','#b3122e','#e0654a','#f4842b','#f7c948','#35a06f','#1b9aaa'],
+  ['#0d47a1','#2b5fd9','#1b9aaa','#35a06f','#a3c14a','#f7c948','#f4842b','#d81b60','#8e24aa','#5e35b1']
+];
+let pal = PALETTES[0].map(hex => [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)]);
+
+let seed = (Math.random() * 1e9) | 0;
+let ox1 = 0, oy1 = 0, ox2 = 0, oy2 = 0;    // noise offsets (reseedable)
+let T = Math.random() * 100;
+let stirX = -1, stirY = -1, stirV = 0;     // drag vortex in field px
+const seedLine = document.getElementById('seedLine');
+
+function reseed() {
+  seed = (Math.random() * 1e9) | 0;
+  ox1 = Math.random() * 256; oy1 = Math.random() * 256;
+  ox2 = Math.random() * 256; oy2 = Math.random() * 256;
+  pal = PALETTES[(Math.random() * PALETTES.length) | 0]
+    .map(hex => [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)]);
+  seedLine.textContent = 'seed ' + (seed >>> 0).toString(16);
+}
+reseed();
+
+// integer-hash value noise
+function hash2(x, y) {
+  let h = (x * 374761393 + y * 668265263 + seed * 2246822519) | 0;
+  h = (h ^ (h >> 13)) | 0;
+  h = (h * 1274126177) | 0;
+  h = (h ^ (h >> 16)) >>> 0;
+  return h / 4294967295;
+}
+function vnoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = hash2(xi, yi), b = hash2(xi + 1, yi);
+  const c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function fbm(x, y, oct) {
+  let s = 0, a = 0.5, f = 1, n = 0;
+  for (let i = 0; i < oct; i++) {
+    s += a * vnoise(x * f, y * f);
+    n += a; a *= 0.5; f *= 2.03;
+  }
+  return s / n;
+}
+
+const NB = 10;
+function field(px, py, t) {
+  // domain warp
+  const wx = fbm(px * 0.012 + ox1 + t * 0.008, py * 0.012 + oy1, 3) - 0.5;
+  const wy = fbm(px * 0.012 + ox2 - t * 0.006, py * 0.012 + oy2, 3) - 0.5;
+  let x = px * 0.032 + wx * 2.2;
+  let y = py * 0.032 + wy * 2.2;
+  // drag vortex
+  if (stirV > 0.01) {
+    const dx = px - stirX, dy = py - stirY;
+    const r2 = dx * dx + dy * dy, R = 90;
+    if (r2 < R * R * 4) {
+      const fall = Math.exp(-r2 / (R * R)) * stirV;
+      x += (-dy / (Math.sqrt(r2) + 4)) * fall * 2.2;
+      y += ( dx / (Math.sqrt(r2) + 4)) * fall * 2.2;
+    }
+  }
+  let v = fbm(x + t * 0.03, y, 4);
+  // radial nest: pull bands into concentric blobs like the original
+  const cx = FW / 2 + Math.sin(t * 0.11) * 30;
+  const cy = FH / 2 + Math.cos(t * 0.09) * 36;
+  const r = Math.hypot(px - cx, py - cy) / (FH * 0.62);
+  v = v * 0.70 + (1 - Math.min(1, r)) * 0.30;
+  v = Math.max(0, Math.min(1, (v - 0.12) / 0.76));
+  return v;
+}
+
+// glitch shards
+const shards = [];
+function spawnShards() {
+  shards.length = 0;
+  let tries = 0;
+  while (shards.length < 90 && tries < 2600) {
+    tries++;
+    const x = 2 + ((Math.random() * (FW - 4)) | 0);
+    const y = 2 + ((Math.random() * (FH - 4)) | 0);
+    const b = bands[y * FW + x];
+    if (bands[y * FW + x + 1] !== b || bands[(y + 1) * FW + x] !== b) {
+      shards.push({ x, y, life: 0.5 + Math.random() * 1.4,
+        dx: (Math.random() - 0.5) * 7, dy: (Math.random() - 0.5) * 7,
+        w: 1.5 + Math.random() * 4, b });
+    }
+  }
+}
+
+let last = performance.now();
+let shardT = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  T += dt;
+  stirV *= Math.pow(0.25, dt);            // vortex decays
+  const t = T;
+
+  const d = img.data;
+  for (let y = 0; y < FH; y++) {
+    for (let x = 0; x < FW; x++) {
+      const v = field(x, y, t);
+      let b = (v * NB) | 0;
+      b = b < 0 ? 0 : b > NB - 1 ? NB - 1 : b;
+      const i = (y * FW + x);
+      bands[i] = b;
+      const o = i * 4, c = pal[b];
+      d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+    }
+  }
+  octx.putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(off, 0, 0, cv.width, cv.height);
+
+  // glitch shards along band edges
+  shardT -= dt;
+  if (shardT <= 0) { spawnShards(); shardT = 0.45 + Math.random() * 0.5; }
+  const sx = cv.width / FW, sy = cv.height / FH;
+  for (const g of shards) {
+    g.life -= dt;
+    if (g.life <= 0) continue;
+    const a = Math.min(1, g.life * 2);
+    const gx = g.x * sx + g.dx * (1 - g.life), gy = g.y * sy + g.dy * (1 - g.life);
+    const w = g.w * sx, h = g.w * sy * 0.7;
+    const c = pal[g.b];
+    ctx.globalAlpha = a * 0.9;
+    ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+    ctx.fillRect(gx, gy, w, h);
+    ctx.fillStyle = '#ff2a3c';
+    ctx.fillRect(gx + 3, gy - 2, w * 0.7, h * 0.7);
+    ctx.fillStyle = '#2adfff';
+    ctx.fillRect(gx - 3, gy + 2, w * 0.7, h * 0.7);
+  }
+  ctx.globalAlpha = 1;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// interaction: drag stirs, tap dreams again
+let pdown = null, pmoved = false;
+function toField(e) {
+  const r = cv.getBoundingClientRect();
+  return [(e.clientX - r.left) / r.width * FW, (e.clientY - r.top) / r.height * FH];
+}
+cv.addEventListener('pointerdown', e => {
+  pdown = toField(e); pmoved = false;
+  cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove', e => {
+  if (!pdown) return;
+  const [fx, fy] = toField(e);
+  if (Math.hypot(fx - pdown[0], fy - pdown[1]) > 4) pmoved = true;
+  stirX = fx; stirY = fy;
+  stirV = Math.min(1.6, stirV + 0.12);
+});
+cv.addEventListener('pointerup', e => {
+  if (pdown && !pmoved) reseed();
+  pdown = null;
+});
+document.getElementById('dreamBtn').addEventListener('click', reseed);
+</script>
+</body>
+</html>
