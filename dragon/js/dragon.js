@@ -368,18 +368,20 @@ export class Dragon {
     const mx = hx + Math.cos(hd) * L * 0.125 * an.head.snout, my = hy + Math.sin(hd) * L * 0.125 * an.head.snout;
     this.mouth.x = mx; this.mouth.y = my;
     const hue = an.fire.hue, u = L / 30;
-    if (this.breath > 0.4) {
-      this.emit += dt * 210 * this.breath * an.fire.rate;
+    if (this.breath > 0.3) {
+      // a narrow, fast core that billows as it travels (see Particles): few, large, soft particles
+      this.emit += dt * 100 * this.breath * an.fire.rate;
       while (this.emit >= 1) {
         this.emit -= 1;
-        const a = hd + (Math.random() + Math.random() + Math.random() - 1.5) * 0.4, spd = rr(34, 46) * u * an.fire.reach;
-        p.fire(mx + rr(-3, 3), my + rr(-3, 3), Math.cos(a) * spd, Math.sin(a) * spd, rr(0.36, 0.52), rr(0.55, 1.0) * u, hue, u);
+        const a = hd + (Math.random() + Math.random() - 1) * 0.07, spd = rr(1.25, 1.7) * L * an.fire.reach;
+        const off = rr(-0.012, 0.012) * L;
+        p.fire(mx - Math.sin(hd) * off, my + Math.cos(hd) * off, Math.cos(a) * spd, Math.sin(a) * spd, rr(0.5, 0.72), rr(0.016, 0.026) * L, hue, u);
       }
-      this.sparkAcc += dt * 70 * this.breath * an.fire.rate;
+      this.sparkAcc += dt * 7 * this.breath * an.fire.rate;
       while (this.sparkAcc >= 1) {
         this.sparkAcc -= 1;
-        const a = hd + rr(-0.45, 0.45), spd = rr(30, 70) * u * an.fire.reach;
-        p.spark(mx, my, Math.cos(a) * spd, Math.sin(a) * spd, rr(0.4, 0.9), hue, u);
+        const a = hd + rr(-0.3, 0.3), spd = rr(40, 90) * u * an.fire.reach;
+        p.spark(mx, my, Math.cos(a) * spd, Math.sin(a) * spd, rr(0.4, 0.8), hue, u);
       }
     }
     // nostril smoke: a lazy curl now and then, quicker when sniffing, slow and warm when asleep

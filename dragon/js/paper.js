@@ -221,25 +221,25 @@ export class Paper {
       return -1;
     };
     const fl = this.stats.flame, ch = this.stats.char;
-    for (let k = rate(0, clamp(fl * 0.9, 0, 120)); k > 0; k--) {
+    for (let k = rate(0, clamp(fl * 0.3, 0, 42)); k > 0; k--) {
       const i = pick(FLAME); if (i < 0) break;
       const x = (i % cols + Math.random()) * cs, y = (((i / cols) | 0) + Math.random()) * cs;
       p.flame(x, y, rr(-6, 6), -rr(6, 16), rr(0.25, 0.55), rr(5, 10), 28, u);
     }
-    for (let k = rate(1, clamp(fl * 0.12 + ch * 0.03, 0, 40)); k > 0; k--) {
+    for (let k = rate(1, clamp(fl * 0.03 + ch * 0.008, 0, 9)); k > 0; k--) {
       const i = pick(Math.random() < 0.6 ? FLAME : CHAR); if (i < 0) break;
       p.smoke((i % cols + Math.random()) * cs, (((i / cols) | 0) + Math.random()) * cs, rr(-6, 10), -rr(8, 20), rr(1.3, 2.4), rr(6, 11));
     }
-    for (let k = rate(2, clamp(fl * 0.05, 0, 16)); k > 0; k--) {
+    for (let k = rate(2, clamp(fl * 0.012, 0, 4)); k > 0; k--) {
       const i = pick(FLAME); if (i < 0) break;
       p.spark((i % cols + 0.5) * cs, (((i / cols) | 0) + 0.5) * cs, rr(-40, 40), -rr(20, 80), rr(0.4, 0.9), 28, u);
     }
-    for (let k = rate(3, clamp(ch * 0.02, 0, 12)); k > 0; k--) {
+    for (let k = rate(3, clamp(ch * 0.006, 0, 3)); k > 0; k--) {
       const i = pick(CHAR); if (i < 0) break;
       p.ember((i % cols + 0.5) * cs, (((i / cols) | 0) + 0.5) * cs, rr(-10, 10), -rr(6, 18), rr(1.2, 2.8), 28, u);
     }
     // ash flakes where a hole has just fallen through
-    if (this.stats.newHoles) for (let k = Math.min(6, this.stats.newHoles); k > 0; k--) {
+    if (this.stats.newHoles) for (let k = Math.min(2, this.stats.newHoles); k > 0; k--) {
       const i = pick(HOLE); if (i < 0) break;
       p.ash((i % cols + 0.5) * cs, (((i / cols) | 0) + 0.5) * cs, u);
     }

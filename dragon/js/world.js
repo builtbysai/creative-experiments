@@ -172,13 +172,13 @@ export class World {
     this.page.update(dt, circs, this);
 
     const pg = this.page, pp = this.paperOn ? this.paper : null;
-    this.particles.update(dt, this.time, (q, ddt) => { pg.hit(q, this); if (pp) pp.burnAt(q.x, q.y, ddt, 9, 0.8 + 0.1 * Math.random()); });
+    this.particles.update(dt, this.time, (q, ddt) => { pg.hit(q, this); if (pp) pp.burnAt(q.x, q.y, ddt, 14, 0.8 + 0.1 * Math.random()); });
     this.paper.enabled = this.paperOn;
     this.paper.update(dt, this.paperOn ? this.particles : null);
 
-    let breath = 0; for (const d of this.dragons) breath = Math.max(breath, d.breath);
+    let breath = 0, bx = 0; for (const d of this.dragons) if (d.breath > breath) { breath = d.breath; bx = d.headPos.x; }
     const pops = this.paper.stats.newHoles + this.paper.stats.ignitions * 0.0;
-    this.sound.update(dt, { breath, flame: this.paper.stats.flame, pops });
+    this.sound.update(dt, { breath, flame: this.paper.stats.flame, pops: this.paper.stats.newHoles, x: this.W ? clamp(bx / this.W * 2 - 1, -1, 1) : 0 });
     this.shake = Math.max(this.shake * Math.exp(-dt * 6), breath * 0.9 + Math.min(2, pops * 0.35));
     this.paper.stats.ignitions = 0;
     this.emit('frame');
