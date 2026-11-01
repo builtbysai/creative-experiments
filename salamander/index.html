@@ -93,9 +93,17 @@ const head = {
   x: W / 2, y: H / 2, heading: -Math.PI / 2,
   tx: W / 2, ty: H / 2,           // pointer target
   speed: 2.2, stridePhase: 0,
+  bendAmt: 0,                     // smoothed 0..1: how much trunk wave to show
   idleT: 0,                       // time since last pointer move
   pauseT: 0, lookT: 0
 };
+// lateral bend offsets (px, perpendicular to local heading), applied at draw.
+// Fire salamanders walk with a STANDING trunk wave noded at the girdles
+// (shoulder joint 6, hip joint 13) and the tail in antiphase (Ashley-Ross).
+const bend = new Array(N).fill(0);
+const bhd = new Array(N).fill(0); // headings of the bent spine
+function bpx(i) { return pts[i].x + -Math.sin(bhd[i]) * bend[i]; }
+function bpy(i) { return pts[i].y +  Math.cos(bhd[i]) * bend[i]; }
 for (let i = 0; i < N; i++) {
   pts.push({ x: head.x - Math.cos(head.heading) * SEG * S * i,
              y: head.y - Math.sin(head.heading) * SEG * S * i });
@@ -132,11 +140,11 @@ const legs = [];
   legs.push(leg);
 });
 function legAnchor(leg) {
-  const j = pts[leg.joint];
-  const px = -Math.sin(hd[leg.joint]), py = Math.cos(hd[leg.joint]);
+  const j = leg.joint;
+  const px = -Math.sin(bhd[j]), py = Math.cos(bhd[j]);
   // hip just inside the body edge; the fleshy limb shows outside it
-  return { x: j.x + px * leg.side * halfWidth(leg.joint) * S * 0.75,
-           y: j.y + py * leg.side * halfWidth(leg.joint) * S * 0.75 };
+  return { x: bpx(j) + px * leg.side * halfWidth(j) * S * 0.75,
+           y: bpy(j) + py * leg.side * halfWidth(j) * S * 0.75 };
 }
 function footTarget(leg, an, dist) {
   const h = hd[leg.joint];
@@ -204,7 +212,7 @@ function step(dt) {
   }
   pts[0].x = head.x; pts[0].y = head.y;
 
-  // body trails the head: still chain, no sway
+  // body trails the head on a follow-the-leader chain
   const seg = SEG * S;
   for (let i = 1; i < N; i++) {
     const a = pts[i - 1], q = pts[i];
@@ -214,6 +222,43 @@ function step(dt) {
     q.y = a.y + dy / d * seg;
   }
   refreshHeadings();
+
+  // ---- axial bending: the walk's signature ----
+  // stridePhase is driven by DISTANCE MOVED (not time), so the wave is
+  // locked to the stride exactly like the emergent leg steps below.
+  // One full wave cycle per strideLen of travel.
+  const strideLen = 64 * S;
+  head.stridePhase += (moved / strideLen) * Math.PI * 2;
+  // bend amount follows speed: a still salamander holds its spine straight
+  const speedNow = moved / Math.max(dt, 0.001);
+  const want = Math.max(0, Math.min(1, speedNow / (2.2 * S)));
+  head.bendAmt += (want - head.bendAmt) * Math.min(1, dt * 0.12);
+  const A = head.bendAmt, ph = head.stridePhase;
+  const TRUNK = 7.0 * S, TAIL = 6.0 * S;
+  for (let i = 0; i < N; i++) {
+    let b = 0;
+    if (i < 6) {
+      // neck/head: nearly stiff (gaze stabilization), slight counter-yaw
+      b = -Math.sin(ph) * TRUNK * 0.12 * (i / 6);
+    } else if (i <= 13) {
+      // trunk: standing wave, NODES at shoulder (6) and hip (13)
+      b = Math.sin(ph) * Math.sin(Math.PI * (i - 6) / 7) * TRUNK;
+    } else {
+      // tail: antiphase to the trunk, slight traveling lag toward the tip
+      const u = (i - 13) / (N - 1 - 13);
+      b = Math.sin(ph + Math.PI - u * 1.1) * TAIL * (0.25 + 0.75 * u);
+    }
+    bend[i] = b;
+  }
+  // headings of the bent spine, for drawing + anchors
+  for (let i = 0; i < N; i++) {
+    const a = Math.max(0, i - 1), z = Math.min(N - 1, i + 1);
+    const axp = pts[a].x + -Math.sin(hd[a]) * bend[a];
+    const ayp = pts[a].y +  Math.cos(hd[a]) * bend[a];
+    const zxp = pts[z].x + -Math.sin(hd[z]) * bend[z];
+    const zyp = pts[z].y +  Math.cos(hd[z]) * bend[z];
+    bhd[i] = Math.atan2(axp - zxp, ayp - zxp);
+  }
 
   // legs: RujiK stepping. No gait clock. Each foot is assigned to its body
   // segment; every frame we guesstimate where the foot WOULD be if it had
@@ -225,7 +270,7 @@ function step(dt) {
   const SWING_DUR = 0.16;
   for (const leg of legs) {
     const an = legAnchor(leg);
-    const h = hd[leg.joint];
+    const h = bhd[leg.joint];
     const ox = -Math.sin(h) * leg.side, oy = Math.cos(h) * leg.side;
     const stepPos = footTarget(leg, an, 21);
     if (leg.planted) {
@@ -267,10 +312,11 @@ function step(dt) {
 function bodyLoop(wScale) {
   const L = [], R = [];
   for (let i = 0; i < N; i++) {
-    const px = -Math.sin(hd[i]), py = Math.cos(hd[i]);
+    const px = -Math.sin(bhd[i]), py = Math.cos(bhd[i]);
     const w = halfWidth(i) * S * wScale;
-    L.push([pts[i].x + px * w, pts[i].y + py * w]);
-    R.push([pts[i].x - px * w, pts[i].y - py * w]);
+    const cx = bpx(i), cy = bpy(i);
+    L.push([cx + px * w, cy + py * w]);
+    R.push([cx - px * w, cy - py * w]);
   }
   return L.concat(R.reverse());
 }
@@ -278,7 +324,7 @@ function bodyLoop(wScale) {
 function drawLeg(leg) {
   const a = legAnchor(leg);
   const s = S;
-  const h = hd[leg.joint];
+  const h = bhd[leg.joint];
   const ox = -Math.sin(h) * leg.side, oy = Math.cos(h) * leg.side; // outward
   const fx = Math.cos(h), fy = Math.sin(h);                       // forward
   // knee placed explicitly: elbows point back, knees point forward. Always.
@@ -321,9 +367,9 @@ function drawLeg(leg) {
 
 function drawFace() {
   const s = S;
-  const ex = pts[1].x * 0.6 + pts[2].x * 0.4;
-  const ey = pts[1].y * 0.6 + pts[2].y * 0.4;
-  const eh = hd[1];
+  const ex = bpx(1) * 0.6 + bpx(2) * 0.4;
+  const ey = bpy(1) * 0.6 + bpy(2) * 0.4;
+  const eh = bhd[1];
   const epx = -Math.sin(eh), epy = Math.cos(eh);
   const ew = halfWidth(1.5) * s;
   for (const sd of [-1, 1]) {
@@ -338,12 +384,12 @@ function drawFace() {
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
     ctx.beginPath(); ctx.arc(cxp - 1.7 * s, cyp - 1.9 * s, 1.4 * s, 0, Math.PI * 2); ctx.fill();
   }
-  const hx = Math.cos(hd[0]), hy = Math.sin(hd[0]);
+  const hx = Math.cos(bhd[0]), hy = Math.sin(bhd[0]);
   ctx.strokeStyle = 'rgba(20,30,20,0.55)';
   ctx.lineWidth = 1.6 * s;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.arc(pts[0].x + hx * 4 * s, pts[0].y + hy * 4 * s, 5 * s, hd[0] + 0.7, hd[0] + Math.PI - 0.7);
+  ctx.arc(bpx(0) + hx * 4 * s, bpy(0) + hy * 4 * s, 5 * s, bhd[0] + 0.7, bhd[0] + Math.PI - 0.7);
   ctx.stroke();
 }
 
@@ -379,9 +425,9 @@ function draw() {
   smoothLoop(bodyLoop(1)); ctx.clip();
   for (const b of blotches) {
     const i0 = Math.floor(b.u), i1 = Math.min(N - 1, i0 + 1), ft = b.u - i0;
-    const sx = pts[i0].x * (1 - ft) + pts[i1].x * ft;
-    const sy = pts[i0].y * (1 - ft) + pts[i1].y * ft;
-    const hdb = hd[i0] * (1 - ft) + hd[i1] * ft;
+    const sx = bpx(i0) * (1 - ft) + bpx(i1) * ft;
+    const sy = bpy(i0) * (1 - ft) + bpy(i1) * ft;
+    const hdb = bhd[i0] * (1 - ft) + bhd[i1] * ft;
     const px = -Math.sin(hdb), py = Math.cos(hdb);
     const w = halfWidth(i0) * S;
     const bx = sx + px * b.v * w, by = sy + py * b.v * w;
