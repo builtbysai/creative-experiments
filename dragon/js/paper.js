@@ -12,7 +12,7 @@
 // (marching squares into a Path2D per tile, with the desk showing through, an inner shadow and a charred rim),
 // and light thrown on the page by the flames.
 
-import { TAU, clamp, lerp, sstep, rr, fbm, noise2, rgbOf } from './util.js';
+import { clamp, lerp, sstep, rr, fbm, noise2, rgbOf } from './util.js';
 
 const INTACT = 0, FLAME = 1, CHAR = 2, HOLE = 3, MEND = 4, PATCH = 5;
 const TILE = 12;                      // cells per tile side (for the hole paths)

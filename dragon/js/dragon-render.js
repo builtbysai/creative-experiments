@@ -1,7 +1,7 @@
 // DragonRenderer draws one Dragon. It reads the dragon's rig (spine, legs, wings, head, pose) and its genome's
 // palette, and owns nothing but cached paths. Painting order for a whole scene is: every shadow(), then every draw().
 
-import { TAU, PI, clamp, lerp, sstep, angDiff, rgba, hsl } from './util.js';
+import { TAU, PI, clamp, lerp, sstep, angDiff, rgba } from './util.js';
 import { M } from './anatomy.js';
 
 const LX = -0.55, LY = -0.83;                       // direction towards the light

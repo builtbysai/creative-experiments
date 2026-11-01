@@ -4,7 +4,6 @@
 
 import { TAU, clamp, Rng, rgba } from './util.js';
 import { THEMES } from './themes.js';
-import { Genome } from './genome.js';
 import { Dragon } from './dragon.js';
 import { DragonRenderer } from './dragon-render.js';
 import { Particles, flameSprites } from './particles.js';
@@ -24,7 +23,6 @@ export class World {
     this.particles = new Particles(); this.page = new Page(); this.paper = new Paper(); this.sound = new Sound();
     this.paperOn = true;
     this.listeners = new Set();
-    this.events = { wordBurn: w => {} };
     this.pointer = { x: 0, y: 0, down: false, mouseDown: false, key: false, seen: false, inside: false, type: 'mouse', lastMove: -99, idleFor: 99, moveSince: 0 };
     this.shake = 0; this.pops = 0;
 
@@ -123,7 +121,7 @@ export class World {
       rg.addColorStop(0, rgba(T.stain, 0.07)); rg.addColorStop(1, rgba(T.stain, 0));
       g.fillStyle = rg; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     }
-    const n = Math.min(9000, (W * H) / 600) | 0;
+    const n = Math.min(3200, (W * H) / 1500) | 0;
     for (let i = 0; i < n; i++) {
       g.fillStyle = r.next() < 0.5 ? T.speckA : T.speckB;
       const x = r.next() * W, y = r.next() * H, len = 1 + r.next() * 4;
@@ -136,8 +134,7 @@ export class World {
     const { colX0, colX1, fs, topY } = this.page;
     const rx0 = colX0 - fs * 0.9, rx1 = colX1 + fs * 0.9, ry0 = topY - fs * 0.8, ry1 = H - topY * 0.5;
     g.moveTo(rx0, ry0); g.lineTo(rx0, ry1); g.moveTo(rx1, ry0); g.lineTo(rx1, ry1);
-    g.moveTo(rx0 - fs * 0.35, ry0); g.lineTo(rx0 - fs * 0.35, ry1); g.moveTo(rx1 + fs * 0.35, ry0); g.lineTo(rx1 + fs * 0.35, ry1);
-    g.stroke();
+        g.stroke();
   }
 
   // ---------------------------------------------------------------- input
@@ -177,7 +174,7 @@ export class World {
     this.paper.update(dt, this.paperOn ? this.particles : null);
 
     let breath = 0, bx = 0; for (const d of this.dragons) if (d.breath > breath) { breath = d.breath; bx = d.headPos.x; }
-    const pops = this.paper.stats.newHoles + this.paper.stats.ignitions * 0.0;
+    const pops = this.paper.stats.newHoles;
     this.sound.update(dt, { breath, flame: this.paper.stats.flame, pops: this.paper.stats.newHoles, x: this.W ? clamp(bx / this.W * 2 - 1, -1, 1) : 0 });
     this.shake = Math.max(this.shake * Math.exp(-dt * 6), breath * 0.9 + Math.min(2, pops * 0.35));
     this.paper.stats.ignitions = 0;

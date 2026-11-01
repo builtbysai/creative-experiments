@@ -8,7 +8,7 @@
 // Needs: energy drains while walking and refills in sleep; boredom grows while nothing is happening and makes
 // the dragon do something silly. The genome's temperament scales how readily each behaviour is chosen.
 
-import { TAU, PI, clamp, lerp, sstep, angDiff, rr } from './util.js';
+import { PI, clamp, lerp, sstep, angDiff, rr } from './util.js';
 import { M } from './anatomy.js';
 
 const rnd = Math.random;
@@ -318,7 +318,6 @@ export class Brain {
   chooseAction(ctx) {
     const options = [];
     for (const k in this.actions) {
-      if (k === 'sleep' && !ctx.isLeader && false) continue;
       const w = this.actions[k].weight(ctx);
       if (w > 0) options.push([k, w]);
     }

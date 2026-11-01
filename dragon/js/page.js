@@ -2,7 +2,7 @@
 // circles the dragons occupy, and words ease sideways into place. Words also burn: they catch from the breath,
 // from the paper under them, and they vanish where the paper itself has fallen away.
 
-import { clamp, lerp, sstep, mix, rr } from './util.js';
+import { clamp, sstep, mix, rr } from './util.js';
 
 const LABEL = 'Bestiarium Ignis · f. 41 verso';
 const HEADING = 'Draco';
@@ -127,18 +127,21 @@ export class Page {
     for (const w of this.words) w.placed = false;
     this.layout(null);
     for (const w of this.words) { w.x = w.tx; w.y = w.ty; w.placed = true; }
-    this.W = W; this.H = H;
+    this.W = W; this.H = H; this.sig = null;
   }
 
   // ---------------------------------------------------------------- per frame
   update(dt, circs, world) {
-    this.layout(circs);
-    const kx = 1 - Math.exp(-dt * 34), words = this.words;
+    // quantise the obstacles so the text only re-flows when the dragon has really moved, not on every pixel
+    const q = this.fs * 0.3, qc = circs.map(c => ({ x: Math.round(c.x / q) * q, y: Math.round(c.y / q) * q, r: Math.ceil(c.r / q) * q }));
+    const sig = qc.map(c => c.x + ',' + c.y + ',' + c.r).join(';');
+    if (sig !== this.sig) { this.sig = sig; this.layout(qc); }
+    const kx = 1 - Math.exp(-dt * 44), words = this.words;
     for (const w of words) {
       if (!w.placed) { w.x = w.tx; w.y = w.ty; w.placed = true; w.a = 1; }
-      else if (Math.abs(w.ty - w.y) > 0.8) { w.x = w.tx; w.y = w.ty; w.a = 0.12; }   // changed line: no sliding through other lines
+      else if (Math.abs(w.ty - w.y) > 0.8) { w.x = w.tx; w.y = w.ty; w.a = 0.0; }     // changed line: no sliding through other lines
       else w.x += (w.tx - w.x) * kx;
-      if (w.a < 1) w.a = Math.min(1, w.a + dt * 9);
+      if (w.a < 1) w.a = Math.min(1, w.a + dt * 7);
     }
     // spatial hash for breath hits
     const CELL = 48, hash = this.hash; hash.clear();
@@ -189,7 +192,7 @@ export class Page {
     if (w.burn >= 0) return;
     w.burn = 0; w.ashed = false; w.fx = 0; w.gen = gen || 0;
     if (!fromPaper && world.paper) world.paper.igniteArea(w.x + w.w / 2, w.y - w.size * 0.3, w.w * 0.5 + w.size * 0.5, 0.78);
-    world.events?.wordBurn?.(w);
+    
   }
 
   /** Breath particle q: does it touch a word? */
