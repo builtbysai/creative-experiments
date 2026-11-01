@@ -48,7 +48,7 @@ export function flameSprites(hue) {
   return s;
 }
 const SMOKE_L = blob([[0, 'rgba(110,92,78,.26)'], [0.6, 'rgba(110,92,78,.1)'], [1, 'rgba(92,84,76,0)']]);
-const SMOKE_D = blob([[0, 'rgba(170,160,150,.32)'], [0.6, 'rgba(170,160,150,.12)'], [1, 'rgba(170,160,150,0)']]);
+const SMOKE_D = blob([[0, 'rgba(170,160,150,.2)'], [0.6, 'rgba(170,160,150,.07)'], [1, 'rgba(170,160,150,0)']]);
 
 export class Particles {
   constructor() { this.list = []; this.cap = 2200; this.fireX = 0; this.fireY = 0; this.fireW = 0; }
@@ -125,7 +125,7 @@ export class Particles {
       const idx = clamp(Math.round((1 - T) * (RAMP - 1)), 0, RAMP - 1);
       const grow = q.k === 'fire' ? 0.7 + 1.9 * Math.pow(f, 0.8) : 0.8 + 1.1 * f;
       const s = q.size * grow;
-      g.globalAlpha = (q.k === 'fire' ? (dark ? 0.55 : 0.78) : 0.7) * Math.min(1, f * 14) * Math.pow(1 - f, 0.7);
+      g.globalAlpha = (q.k === 'fire' ? (dark ? 0.34 : 0.78) : 0.7) * Math.min(1, f * 14) * Math.pow(1 - f, 0.7);
       g.drawImage(sp.ramp[idx], q.x - s, q.y - s, s * 2, s * 2);
     }
     g.lineCap = 'round';

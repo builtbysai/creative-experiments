@@ -1,89 +1,110 @@
-// The editor. Controls are generated from the Genome SCHEMA, so a new gene shows up here by itself.
-// Everything edits the selected dragon's genome live; the dragon rebuilds its anatomy on the next frame.
+// The HUD, in two parts.
+//
+//   Dock    always visible, bottom centre: one chip per dragon (tap to select, + to add) and icon toggles for the
+//           scene (new look, flock, fire on paper, sound, theme, mend the page, open the editor).
+//   Editor  a side card (a bottom sheet on phones) for the selected dragon: preset swatches, one tab per gene
+//           group with its sliders, and the herd actions.
+//
+// Controls are generated from the Genome SCHEMA, so a new gene shows up here by itself.
 
 import { SCHEMA, GROUPS, PRESETS, Genome } from './genome.js';
 import { MAX_DRAGONS } from './world.js';
 import { Store } from './store.js';
 import { hsl } from './util.js';
 
+const I = {
+  dice: '<path d="M3 3h10v10H3z"/><circle cx="6" cy="6" r=".6" fill="currentColor"/><circle cx="10" cy="10" r=".6" fill="currentColor"/><circle cx="10" cy="6" r=".6" fill="currentColor"/><circle cx="6" cy="10" r=".6" fill="currentColor"/>',
+  sliders: '<path d="M2 5h7M13 5h1M2 11h1M7 11h7"/><circle cx="11" cy="5" r="1.7"/><circle cx="5" cy="11" r="1.7"/>',
+  flock: '<path d="M8 3l3 5H5zM4 9l3 4H1zM12 9l3 4H9z"/>',
+  flame: '<path d="M8 14c-2.6 0-4-1.7-4-3.8 0-2 1.6-3 2.2-5 1.2.9 1.6 2 1.6 3 .6-.5 1-1.4 1-2.4 1.6 1.3 3.2 2.6 3.2 4.4 0 2-1.4 3.8-4 3.8z"/>',
+  sound: '<path d="M2.5 6.5h2.2L8 3.5v9L4.7 9.5H2.5z"/><path d="M10.5 6a3 3 0 0 1 0 4M12.3 4.3a5.5 5.5 0 0 1 0 7.4"/>',
+  mute: '<path d="M2.5 6.5h2.2L8 3.5v9L4.7 9.5H2.5z"/><path d="M11 6.5l3 3M14 6.5l-3 3"/>',
+  sun: '<circle cx="8" cy="8" r="3"/><path d="M8 1.8v1.4M8 12.8v1.4M1.8 8h1.4M12.8 8h1.4M3.6 3.6l1 1M11.4 11.4l1 1M3.6 12.4l1-1M11.4 4.6l1-1"/>',
+  moon: '<path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/>',
+  restore: '<path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v3h3"/>',
+  plus: '<path d="M8 3v10M3 8h10"/>',
+  close: '<path d="M4 4l8 8M12 4l-8 8"/>',
+  crown: '<path d="M2.5 11.5l-.5-6 3.2 2.5L8 4l2.8 4 3.2-2.5-.5 6z"/>'
+};
+const icon = n => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+
 const CSS = `
-#edit-toggle{position:fixed;right:16px;bottom:16px;z-index:20;width:38px;height:38px;display:grid;place-items:center;color:var(--ui);background:var(--uiBg);border:1px solid var(--uiLine);border-radius:8px;cursor:pointer;padding:0;transition:border-color .15s,transform .15s}
-#edit-toggle:hover{border-color:var(--ui)}
-#edit-toggle:active{transform:scale(.96)}
-#edit-toggle svg{width:16px;height:16px}
-#panel{position:fixed;z-index:30;top:16px;right:16px;bottom:16px;width:min(300px,calc(100vw - 32px));display:flex;flex-direction:column;color:var(--ui);background:var(--uiBg);border:1px solid var(--uiLine);border-radius:10px;transform:translateX(calc(100% + 32px));transition:transform .28s cubic-bezier(.3,.8,.3,1);font:400 12.5px/1.4 var(--sans);-webkit-font-smoothing:antialiased}
-#panel.open{transform:none}
-#panel button,#panel select{font:inherit;color:inherit;cursor:pointer}
-#panel button:focus-visible,#panel select:focus-visible,#panel input:focus-visible,#edit-toggle:focus-visible{outline:2px solid var(--uiAccent);outline-offset:2px}
-#panel header{display:flex;align-items:center;justify-content:space-between;padding:14px 14px 10px 16px}
-#panel h2{margin:0;font:600 17px/1 var(--serif);letter-spacing:-.005em}
-.icon{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:6px;background:none;color:var(--uiMuted);padding:0}
-.icon:hover{color:var(--ui);background:var(--uiHover)}
-.icon svg{width:14px;height:14px}
-.scroll{overflow-y:auto;overscroll-behavior:contain;padding:0 0 16px;flex:1;-webkit-overflow-scrolling:touch}
-.list{margin:0 8px 8px;display:flex;flex-direction:column}
-.row{display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border:0;border-radius:6px;background:none;text-align:left;width:100%;position:relative}
-.row:hover{background:var(--uiHover)}
-.row[aria-selected=true]{background:var(--uiHover)}
-.row[aria-selected=true]::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:1px;background:var(--uiAccent)}
-.row i{width:10px;height:10px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)}
-.row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row .tag{font-size:11px;color:var(--uiMuted)}
-.row.add{color:var(--uiMuted)}
-.row.add:hover{color:var(--ui)}
-.row.add svg{width:10px;height:10px;flex:none}
-.bar{display:flex;margin:0 16px 12px;border:1px solid var(--uiLine);border-radius:7px;overflow:hidden}
-.bar>*{flex:1 1 auto;border:0;border-left:1px solid var(--uiLine);background:none;padding:8px 6px;font-size:12px;text-align:center;white-space:nowrap}
-.bar>:first-child{border-left:0}
-.bar>button:hover:not(:disabled),.bar>select:hover{background:var(--uiHover)}
-.bar>button:disabled{color:var(--uiMuted);opacity:.45;cursor:default}
-.bar select{appearance:none;-webkit-appearance:none;text-align:center;text-align-last:center;max-width:34%}
-.bar select option{color:#222;background:#fff}
-.bar .danger:hover:not(:disabled){color:var(--uiAccent)}
-details{margin:0 16px;border-top:1px solid var(--uiLine)}
-summary{list-style:none;cursor:pointer;padding:12px 0;font:600 12px/1 var(--sans);display:flex;justify-content:space-between;align-items:center;-webkit-user-select:none;user-select:none}
-summary::-webkit-details-marker{display:none}
-summary::after{content:'';width:6px;height:6px;border:solid var(--uiMuted);border-width:0 1.5px 1.5px 0;transform:rotate(45deg) translateY(-2px);transition:transform .2s}
-details[open] summary::after{transform:rotate(-135deg) translate(-1px,-1px)}
-.ctl{display:grid;grid-template-columns:1fr auto;gap:1px 8px;margin:0 0 10px}
+.hud{--r:12px;font:400 13px/1.4 var(--sans);color:var(--ui);-webkit-font-smoothing:antialiased}
+.hud button,.hud select{font:inherit;color:inherit;cursor:pointer}
+.hud :focus-visible{outline:2px solid var(--uiAccent);outline-offset:2px}
+#dock{position:fixed;z-index:30;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:6px;background:var(--uiBg);border:1px solid var(--uiLine);border-radius:16px;box-shadow:0 6px 24px rgba(30,15,0,.14);max-width:calc(100vw - 16px)}
+#dock .sep{width:1px;align-self:stretch;margin:4px 2px;background:var(--uiLine)}
+.herd{display:flex;gap:2px;align-items:center}
+.chip{position:relative;width:34px;height:34px;display:grid;place-items:center;border:0;background:none;border-radius:50%;padding:0}
+.chip i{width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.22);transition:transform .15s}
+.chip:hover i{transform:scale(1.12)}
+.chip[aria-pressed=true]{box-shadow:0 0 0 2px var(--uiBg),0 0 0 3.5px var(--ui)}
+.chip .lead{position:absolute;right:-1px;top:-1px;width:12px;height:12px;display:grid;place-items:center;border-radius:50%;background:var(--ui);color:var(--uiBg)}
+.chip .lead svg{width:8px;height:8px;stroke-width:1.8}
+.tool{width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:10px;background:none;color:var(--uiMuted);padding:0;position:relative;transition:background .12s,color .12s,transform .12s}
+.tool svg{width:18px;height:18px}
+.tool:hover:not(:disabled){background:var(--uiHover);color:var(--ui)}
+.tool:active:not(:disabled){transform:scale(.92)}
+.tool[aria-pressed=true]{color:var(--ui);background:var(--uiHover)}
+.tool.accent[aria-pressed=true]{background:var(--ui);color:var(--uiBg)}
+.tool:disabled{opacity:.35;cursor:default}
+.hud [data-tip]:hover::after,.hud [data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);white-space:nowrap;background:var(--ui);color:var(--uiBg);font:500 11.5px/1 var(--sans);padding:6px 8px;border-radius:6px;pointer-events:none}
+@media (hover:none){.hud [data-tip]::after{display:none!important}}
+
+#editor{position:fixed;z-index:29;top:16px;right:16px;bottom:16px;width:min(320px,calc(100vw - 32px));display:flex;flex-direction:column;background:var(--uiBg);border:1px solid var(--uiLine);border-radius:var(--r);box-shadow:0 10px 40px rgba(30,15,0,.16);transform:translateX(calc(100% + 40px));opacity:0;visibility:hidden;transition:transform .3s cubic-bezier(.3,.8,.3,1),opacity .2s,visibility 0s .3s}
+#editor.open{transform:none;opacity:1;visibility:visible;transition:transform .3s cubic-bezier(.3,.8,.3,1),opacity .2s}
+#editor header{display:flex;align-items:center;gap:10px;padding:14px 12px 4px 16px}
+#editor h2{margin:0;flex:1;font:600 18px/1.1 var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#editor h2 small{display:block;margin-top:3px;font:400 11.5px/1 var(--sans);color:var(--uiMuted)}
+.sw-row{display:flex;gap:7px;padding:10px 16px 4px;flex-wrap:wrap}
+.swatch{width:24px;height:24px;border-radius:50%;border:0;padding:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.2);position:relative;transition:transform .12s}
+.swatch:hover{transform:scale(1.15)}
+.tabs{display:flex;flex-wrap:wrap;gap:0 2px;padding:6px 10px 0;border-bottom:1px solid var(--uiLine)}
+.tabs button{border:0;background:none;padding:7px 7px 9px;color:var(--uiMuted);font-weight:500;position:relative}
+.tabs button:hover{color:var(--ui)}
+.tabs button[aria-selected=true]{color:var(--ui)}
+.tabs button[aria-selected=true]::after{content:'';position:absolute;left:7px;right:7px;bottom:-1px;height:2px;border-radius:1px;background:var(--uiAccent)}
+.pane{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:16px 16px 8px;-webkit-overflow-scrolling:touch}
+.ctl{display:grid;grid-template-columns:1fr auto;gap:2px 8px;margin:0 0 14px}
 .ctl label{color:var(--uiMuted)}
-.ctl output{font:400 11px var(--mono);color:var(--ui);font-variant-numeric:tabular-nums;text-align:right}
-input[type=range]{grid-column:1/3;width:100%;height:20px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer;--p:50%}
-input[type=range]::-webkit-slider-runnable-track{height:2px;border-radius:1px;background:linear-gradient(90deg,var(--ui) var(--p),var(--uiLine) var(--p))}
-input[type=range]::-moz-range-track{height:2px;border-radius:1px;background:var(--uiLine)}
-input[type=range]::-moz-range-progress{height:2px;background:var(--ui)}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;margin-top:-5px;border-radius:50%;background:var(--ui);border:0}
-input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ui);border:0}
-.ctl.hue input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,hsl(0 65% 52%),hsl(45 70% 52%),hsl(95 55% 48%),hsl(150 55% 44%),hsl(195 60% 48%),hsl(240 60% 58%),hsl(285 55% 55%),hsl(330 62% 55%),hsl(360 65% 52%))}
-.ctl.hue input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:linear-gradient(90deg,hsl(0 65% 52%),hsl(45 70% 52%),hsl(95 55% 48%),hsl(150 55% 44%),hsl(195 60% 48%),hsl(240 60% 58%),hsl(285 55% 55%),hsl(330 62% 55%),hsl(360 65% 52%))}
-.ctl.hue input[type=range]::-webkit-slider-thumb{margin-top:-5px;width:16px;height:16px;background:var(--sw,#fff);box-shadow:0 0 0 1px var(--ui)}
-.ctl.hue input[type=range]::-moz-range-thumb{width:12px;height:12px;background:var(--sw,#fff);box-shadow:0 0 0 1px var(--ui)}
-.seg{grid-column:1/3;display:flex;border:1px solid var(--uiLine);border-radius:6px;overflow:hidden;margin-top:3px}
-.seg button{flex:1;border:0;border-left:1px solid var(--uiLine);background:none;padding:6px 4px;font-size:12px;color:var(--uiMuted)}
-.seg button:first-child{border-left:0}
-.seg button[aria-pressed=true]{background:var(--ui);color:var(--uiBg)}
-.sw{display:flex;justify-content:space-between;align-items:center;padding:6px 0;cursor:pointer}
-.sw input{appearance:none;-webkit-appearance:none;width:30px;height:18px;border-radius:9px;background:var(--uiLine);position:relative;margin:0;cursor:pointer;transition:background .15s}
-.sw input::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--uiBg);transition:transform .15s}
-.sw input:checked{background:var(--ui)}
-.sw input:checked::after{transform:translateX(12px)}
-.links{display:flex;gap:16px;margin:14px 16px 0;padding-top:12px;border-top:1px solid var(--uiLine)}
-.link{border:0;background:none;padding:0;color:var(--uiMuted);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--uiLine)}
-.link:hover{color:var(--ui)}
-.scene-link{margin:2px 0 8px}
+.ctl output{font:400 12px var(--mono);color:var(--ui);font-variant-numeric:tabular-nums}
+input[type=range]{grid-column:1/3;width:100%;height:22px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer;--p:50%}
+input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:linear-gradient(90deg,var(--ui) var(--p),var(--uiLine) var(--p))}
+input[type=range]::-moz-range-track{height:3px;border-radius:2px;background:var(--uiLine)}
+input[type=range]::-moz-range-progress{height:3px;border-radius:2px;background:var(--ui)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-6.5px;border-radius:50%;background:var(--uiBg);border:2px solid var(--ui);transition:transform .12s}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--uiBg);border:2px solid var(--ui)}
+input[type=range]:active::-webkit-slider-thumb{transform:scale(1.2)}
+.ctl.hue input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:4px;background:linear-gradient(90deg,hsl(0 65% 52%),hsl(45 70% 52%),hsl(95 55% 48%),hsl(150 55% 44%),hsl(195 60% 48%),hsl(240 60% 58%),hsl(285 55% 55%),hsl(330 62% 55%),hsl(360 65% 52%))}
+.ctl.hue input[type=range]::-moz-range-track{height:8px;border-radius:4px;background:linear-gradient(90deg,hsl(0 65% 52%),hsl(45 70% 52%),hsl(95 55% 48%),hsl(150 55% 44%),hsl(195 60% 48%),hsl(240 60% 58%),hsl(285 55% 55%),hsl(330 62% 55%),hsl(360 65% 52%))}
+.ctl.hue input[type=range]::-webkit-slider-thumb{margin-top:-5px;background:var(--sw,#fff)}
+.ctl.hue input[type=range]::-moz-range-thumb{background:var(--sw,#fff)}
+.seg{grid-column:1/3;display:flex;gap:4px}
+.seg button{flex:1;border:1px solid var(--uiLine);background:none;border-radius:8px;padding:7px 4px;color:var(--uiMuted)}
+.seg button:hover{color:var(--ui);border-color:var(--ui)}
+.seg button[aria-pressed=true]{background:var(--ui);border-color:var(--ui);color:var(--uiBg)}
+#editor footer{display:flex;gap:4px;padding:8px 10px 10px;border-top:1px solid var(--uiLine)}
+.act{flex:1;border:0;background:none;border-radius:8px;padding:8px 2px;color:var(--uiMuted);font-size:12px;font-weight:500}
+.act:hover:not(:disabled){background:var(--uiHover);color:var(--ui)}
+.act.danger:hover:not(:disabled){color:var(--uiAccent)}
+.act:disabled{opacity:.35;cursor:default}
+
 @media (max-width:640px){
-  #panel{top:auto;left:8px;right:8px;bottom:8px;width:auto;height:min(56vh,500px);transform:translateY(calc(100% + 16px))}
-  #edit-toggle{right:12px;bottom:12px}
-  input[type=range]{height:28px}
+  #dock{bottom:10px;gap:2px;padding:5px}
+  .chip{width:32px;height:32px}.tool{width:34px;height:34px}
+  #editor{top:auto;left:8px;right:8px;bottom:70px;width:auto;height:min(54vh,460px);transform:translateY(calc(100% + 90px))}
+  input[type=range]{height:30px}
 }
-@media (prefers-reduced-motion:reduce){#panel{transition:none}}
+@media (prefers-reduced-motion:reduce){#editor,.tool,.chip i{transition:none}}
 `;
 
 const el = (tag, props = {}, ...kids) => {
   const e = document.createElement(tag);
   for (const k in props) {
-    if (k === 'class') e.className = props[k]; else if (k === 'text') e.textContent = props[k];
-    else if (k.startsWith('on')) e.addEventListener(k.slice(2), props[k]); else e.setAttribute(k, props[k]);
+    const v = props[k];
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else if (k === 'html') e.innerHTML = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v === true ? '' : v);
   }
   for (const c of kids) if (c) e.append(c);
   return e;
@@ -91,162 +112,146 @@ const el = (tag, props = {}, ...kids) => {
 
 export class Panel {
   constructor(world) {
-    this.world = world; this.controls = new Map(); this.openGroup = 'Body';
+    this.world = world; this.controls = new Map(); this.group = GROUPS[0]; this.tools = {};
     const st = document.createElement('style'); st.textContent = CSS; document.head.append(st);
     this.build();
-    world.on((type) => { if (type === 'theme') this.theming(); if (type === 'dragons' || type === 'select' || type === 'leader') { this.tabs(); this.sync(); } });
+    world.on(type => {
+      if (type === 'theme') this.theming();
+      if (type === 'dragons' || type === 'select' || type === 'leader') { this.dock(); this.head(); this.sync(); }
+    });
     this.theming();
     this.saveSoon = (() => { let t; return () => { clearTimeout(t); t = setTimeout(() => Store.save(world), 300); }; })();
   }
 
+  get d() { return this.world.selected; }
+  get isOpen() { return this.editor.classList.contains('open'); }
+
   theming() {
     const T = this.world.theme, r = document.documentElement.style;
-    r.setProperty('--ui', T.ui); r.setProperty('--uiHover', T.uiHover); r.setProperty('--uiBg', T.uiBg); r.setProperty('--uiLine', T.uiLine); r.setProperty('--uiMuted', T.uiMuted); r.setProperty('--uiAccent', T.uiAccent);
-    r.setProperty('--serif', "Fraunces, Georgia, serif"); r.setProperty('--mono', "'Plex Mono', ui-monospace, Menlo, monospace");
+    for (const k of ['ui', 'uiBg', 'uiHover', 'uiLine', 'uiMuted', 'uiAccent']) r.setProperty('--' + k, T[k]);
+    r.setProperty('--serif', 'Fraunces, Georgia, serif'); r.setProperty('--mono', "'Plex Mono', ui-monospace, Menlo, monospace");
     r.setProperty('--sans', "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif");
-    this.tabs();
+    if (this.dockEl) { this.dock(); this.swatches(); this.tools.theme.innerHTML = icon(T.dark ? 'moon' : 'sun'); }
   }
 
-  get d() { return this.world.selected; }
-
   open(v = true) {
-    this.panel.classList.toggle('open', v); this.btn.setAttribute('aria-expanded', v);
-    this.btn.style.display = v && matchMedia('(max-width:640px)').matches ? 'none' : '';
+    this.editor.classList.toggle('open', v);
+    this.tools.edit.setAttribute('aria-pressed', String(v));
     this.world.showSelection = v && this.world.dragons.length > 1;
     if (v) this.sync();
   }
 
+  // ---------------------------------------------------------------- build
   build() {
     const w = this.world;
-    const ICON = {
-      sliders: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 5h7M13 5h1M2 11h1M7 11h7"/><circle cx="11" cy="5" r="1.7"/><circle cx="5" cy="11" r="1.7"/></svg>',
-      close: '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg>',
-      plus: '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M5 1v8M1 5h8"/></svg>'
+    this.herdEl = el('div', { class: 'herd', role: 'group', 'aria-label': 'Dragons' });
+    this.dockEl = el('div', { id: 'dock', class: 'hud', role: 'toolbar', 'aria-label': 'Scene' }, this.herdEl, el('span', { class: 'sep' }));
+    const tool = (key, ico, tip, fn, cls = '') => {
+      const b = el('button', { class: 'tool ' + cls, type: 'button', 'data-tip': tip, 'aria-label': tip, html: icon(ico), onclick: fn });
+      this.tools[key] = b; this.dockEl.append(b); return b;
     };
-    this.ICON = ICON;
-    this.btn = el('button', { id: 'edit-toggle', title: 'Edit dragons', 'aria-label': 'Edit dragons', 'aria-expanded': 'false', 'aria-controls': 'panel', onclick: () => this.open(!this.panel.classList.contains('open')) });
-    this.btn.innerHTML = ICON.sliders;
-    this.panel = el('aside', { id: 'panel', 'aria-label': 'Dragon editor' });
-    const close = el('button', { class: 'icon', 'aria-label': 'Close', onclick: () => this.open(false) }); close.innerHTML = ICON.close;
-    const head = el('header', {}, el('h2', { text: 'Dragons' }), close);
-    this.listEl = el('div', { class: 'list', role: 'listbox', 'aria-label': 'Dragons' });
-    this.presetSel = el('select', { 'aria-label': 'Apply a preset', onchange: e => { const n = e.target.value; if (!n) return; this.apply(Genome.preset(n).v); e.target.value = ''; } },
-      el('option', { value: '', text: 'Preset' }), ...Object.keys(PRESETS).map(n => el('option', { value: n, text: n })));
-    this.shapeBar = el('div', { class: 'bar', role: 'group', 'aria-label': 'Reshape this dragon' });
-    this.shapeBar.append(this.presetSel,
-      this.mk('Random', () => this.apply(Genome.random().v)),
-      this.mk('Mutate', () => this.apply(this.d.genome.mutate(0.18).v)),
-      this.mk('Reset', () => this.apply(Genome.preset('Ember').v)));
-    this.herdBar = el('div', { class: 'bar', role: 'group', 'aria-label': 'Herd' });
-    this.herdBar.append(
-      this.mk('Clone', () => this.add(this.d.genome.mutate(0.06)), 'clone'),
-      this.mk('Breed', () => this.breed(), 'breed'),
-      this.mk('Lead', () => w.setLeader(this.d), 'lead'),
-      this.mk('Remove', () => { w.removeDragon(this.d); this.saveSoon(); }, 'remove', 'danger'));
-    const scroll = el('div', { class: 'scroll' }, this.listEl, this.shapeBar, this.herdBar);
-    // genome controls
-    this.groupsEl = el('div');
+    const toggle = (key, ico, tip, get, set, cls) => {
+      const b = tool(key, ico, tip, () => { set(!get()); b.setAttribute('aria-pressed', String(get())); }, cls);
+      b.setAttribute('aria-pressed', String(get())); return b;
+    };
+    tool('shuffle', 'dice', 'New look', () => this.shuffle());
+    toggle('flock', 'flock', 'Flock together', () => w.flocking, v => { w.flocking = v; });
+    toggle('paper', 'flame', 'Fire burns the page', () => w.paperOn, v => { w.paperOn = v; });
+    const snd = toggle('sound', 'sound', 'Sound', () => !w.sound.muted, v => { w.sound.unlock(); w.sound.setMuted(!v); snd.innerHTML = icon(v ? 'sound' : 'mute'); if (v) w.sound.blip(true); });
+    snd.innerHTML = icon(w.sound.muted ? 'mute' : 'sound');
+    tool('theme', 'sun', 'Light or dark', () => w.setThemeMode(w.theme.dark ? 'light' : 'dark'));
+    tool('restore', 'restore', 'Mend the page', () => w.restorePage());
+    this.dockEl.append(el('span', { class: 'sep' }));
+    tool('edit', 'sliders', 'Edit dragon', () => this.open(!this.isOpen), 'accent').setAttribute('aria-pressed', 'false');
+
+    // editor
+    this.title = el('h2');
+    const close = el('button', { class: 'tool', type: 'button', 'aria-label': 'Close editor', html: icon('close'), onclick: () => this.open(false) });
+    this.swEl = el('div', { class: 'sw-row', role: 'group', 'aria-label': 'Presets' });
+    this.tabsEl = el('div', { class: 'tabs', role: 'tablist' });
+    this.pane = el('div', { class: 'pane', role: 'tabpanel' });
+    this.panes = {};
     for (const grp of GROUPS) {
-      const det = el('details', { open: grp === this.openGroup ? '' : null }, el('summary', { text: grp }));
-      det.addEventListener('toggle', () => { if (det.open) this.openGroup = grp; });
-      for (const s of SCHEMA.filter(s => s.group === grp)) det.append(this.control(s));
-      this.groupsEl.append(det);
+      const p = el('div', { hidden: true });
+      for (const s of SCHEMA.filter(s => s.group === grp)) p.append(this.control(s));
+      this.panes[grp] = p; this.pane.append(p);
+      this.tabsEl.append(el('button', { type: 'button', role: 'tab', text: grp, 'data-g': grp, onclick: () => this.tab(grp) }));
     }
-    scroll.append(this.groupsEl, this.scene(), this.footer());
-    this.panel.append(head, scroll);
-    document.body.append(this.btn, this.panel);
-    this.tabs();
+    const act = (text, fn, id, cls = '') => el('button', { class: 'act ' + cls, type: 'button', text, 'data-id': id, onclick: fn });
+    this.foot = el('footer', {},
+      act('Mutate', () => this.apply(this.d.genome.mutate(0.18).v), 'mutate'),
+      act('Clone', () => this.add(this.d.genome.mutate(0.06)), 'clone'),
+      act('Breed', () => this.breed(), 'breed'),
+      act('Lead', () => w.setLeader(this.d), 'lead'),
+      act('Share', () => this.share(), 'share'),
+      act('Remove', () => { w.removeDragon(this.d); this.saveSoon(); }, 'remove', 'danger'));
+    this.editor = el('aside', { id: 'editor', class: 'hud', 'aria-label': 'Dragon editor' },
+      el('header', {}, this.title, close), this.swEl, this.tabsEl, this.pane, this.foot);
+    document.body.append(this.dockEl, this.editor);
+    this.swatches(); this.tab(this.group); this.dock(); this.head();
   }
 
-  mk(text, fn, id, cls = '') { const b = el('button', { class: cls, type: 'button', text, onclick: fn }); if (id) b.dataset.id = id; return b; }
-
   control(s) {
-    const wrap = el('div', { class: 'ctl' + (s.type === 'hue' ? ' hue' : '') });
-    const id = 'g-' + s.key;
-    const out = el('output', { for: id });
+    const wrap = el('div', { class: 'ctl' + (s.type === 'hue' ? ' hue' : ''), title: s.hint || null });
+    const id = 'g-' + s.key, out = el('output', { for: id });
     wrap.append(el('label', { for: id, text: s.label }), out);
     if (s.type === 'select') {
       const seg = el('div', { class: 'seg', role: 'group', 'aria-label': s.label });
-      for (const [val, label] of s.options) seg.append(el('button', { text: label, 'aria-pressed': 'false', 'data-v': val, onclick: () => this.set(s.key, val) }));
-      out.textContent = '';
-      wrap.append(seg);
-      this.controls.set(s.key, { s, seg, out });
+      for (const [val, label] of s.options) seg.append(el('button', { type: 'button', text: label, 'aria-pressed': 'false', 'data-v': val, onclick: () => this.set(s.key, val) }));
+      wrap.append(seg); this.controls.set(s.key, { s, seg, out });
     } else {
       const inp = el('input', { type: 'range', id, min: s.min, max: s.max, step: s.step, value: s.def });
       inp.addEventListener('input', () => { this.fill(inp); this.set(s.key, +inp.value); });
-      inp.addEventListener('dblclick', () => this.set(s.key, s.def));
-      wrap.append(inp);
-      if (s.hint) wrap.title = s.hint;
-      this.controls.set(s.key, { s, inp, out });
+      inp.addEventListener('dblclick', () => { inp.value = s.def; this.fill(inp); this.set(s.key, s.def); });
+      wrap.append(inp); this.controls.set(s.key, { s, inp, out });
     }
     return wrap;
   }
 
   fill(inp) { inp.style.setProperty('--p', ((+inp.value - inp.min) / (inp.max - inp.min) * 100) + '%'); }
 
-  scene() {
-    const w = this.world, box = el('details', { open: '' }, el('summary', { text: 'Scene' }));
-    const sw = (label, get, set) => { const i = el('input', { type: 'checkbox', role: 'switch' }); i.checked = get(); i.addEventListener('change', () => set(i.checked)); return el('label', { class: 'sw' }, el('span', { text: label }), i); };
-    box.append(
-      sw('Flock together', () => w.flocking, v => { w.flocking = v; }),
-      sw('Paper burns', () => w.paperOn, v => { w.paperOn = v; }),
-      sw('Sound', () => !w.sound.muted, v => { w.sound.unlock(); w.sound.setMuted(!v); if (v) w.sound.blip(true); }));
-    const seg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Theme' });
-    for (const m of ['auto', 'light', 'dark']) {
-      seg.append(el('button', { type: 'button', text: m[0].toUpperCase() + m.slice(1), 'aria-pressed': String(w.themeMode === m), onclick: () => { w.setThemeMode(m); [...seg.children].forEach(c => c.setAttribute('aria-pressed', String(c.textContent.toLowerCase() === m))); } }));
+  tab(grp) {
+    this.group = grp;
+    for (const g in this.panes) this.panes[g].hidden = g !== grp;
+    for (const b of this.tabsEl.children) b.setAttribute('aria-selected', String(b.dataset.g === grp));
+    this.pane.scrollTop = 0;
+  }
+
+  swatches() {
+    if (!this.swEl) return;
+    this.swEl.replaceChildren();
+    const dark = this.world.theme.dark;
+    for (const n of Object.keys(PRESETS)) {
+      const pal = Genome.preset(n).palette(dark);
+      this.swEl.append(el('button', { class: 'swatch', type: 'button', title: n, 'aria-label': 'Preset ' + n, style: `background:linear-gradient(135deg,${pal.skin} 55%,${pal.spike} 55%)`, onclick: () => this.apply(Genome.preset(n).v) }));
     }
-    box.append(el('div', { class: 'ctl', style: 'margin-top:6px' }, el('label', { text: 'Theme' }), el('span'), seg));
-    const restore = el('button', { class: 'link scene-link', type: 'button', text: 'Restore the page', onclick: () => w.restorePage() });
-    box.append(restore);
-    return box;
   }
 
-  footer() {
-    this.shareBtn = el('button', { class: 'link', type: 'button', text: 'Copy share link', onclick: async () => {
-      const url = Store.url(this.world);
-      history.replaceState(null, '', url.slice(location.origin.length));
-      try { await navigator.clipboard.writeText(url); this.shareBtn.textContent = 'Copied'; } catch (_) { this.shareBtn.textContent = 'Link is in the address bar'; }
-      setTimeout(() => { this.shareBtn.textContent = 'Copy share link'; }, 1800);
-    } });
-    const forget = el('button', { class: 'link', type: 'button', text: 'Forget saved', onclick: () => { Store.clear(); forget.textContent = 'Cleared'; setTimeout(() => { forget.textContent = 'Forget saved'; }, 1500); } });
-    return el('div', { class: 'links' }, this.shareBtn, forget);
-  }
-
-  // ---------------------------------------------------------------- actions
-  set(key, val) { this.d.genome.set(key, val); this.sync(key); this.saveSoon(); }
-  apply(values) { this.d.genome.patch(values); this.sync(); this.saveSoon(); }
-  add(g) {
-    const d = this.world.addDragon(g); if (!d) return;
-    this.saveSoon();
-  }
-  breed() {
-    const ds = this.world.dragons; if (ds.length < 2) return;
-    const a = this.d, b = ds.find(x => x !== a && x === ds[(ds.indexOf(a) + 1) % ds.length]) || ds[0];
-    this.add(Genome.cross(a.genome, b.genome));
-  }
-
-  tabs() {
-    const w = this.world; if (!this.listEl) return;
-    this.listEl.replaceChildren();
+  // ---------------------------------------------------------------- state -> view
+  dock() {
+    const w = this.world, n = w.dragons.length, dark = w.theme.dark;
+    this.herdEl.replaceChildren();
     for (const d of w.dragons) {
-      const pal = d.genome.palette(w.theme.dark), sel = d === w.selected;
-      this.listEl.append(el('button', { class: 'row', role: 'option', 'aria-selected': String(sel), onclick: () => w.select(d) },
-        el('i', { style: `background:${pal.skin}` }), el('span', { class: 'nm', text: d.name }),
-        d === w.leader && w.dragons.length > 1 ? el('span', { class: 'tag', text: 'Leader' }) : null));
+      const pal = d.genome.palette(dark), sel = d === w.selected;
+      this.herdEl.append(el('button', { class: 'chip', type: 'button', 'data-tip': d.name, 'aria-label': d.name, 'aria-pressed': String(sel), onclick: () => { w.select(d); } },
+        el('i', { style: `background:linear-gradient(135deg,${pal.skin} 55%,${pal.spike} 55%)` }),
+        n > 1 && d === w.leader ? el('span', { class: 'lead', html: icon('crown') }) : null));
     }
-    const n = w.dragons.length, add = el('button', { class: 'row add', type: 'button', disabled: n >= MAX_DRAGONS ? '' : null, onclick: () => this.add(Genome.random()) });
-    add.innerHTML = this.ICON.plus + '<span class="nm">Add dragon</span>';
-    this.listEl.append(add);
-    if (this.herdBar) {
-      const q = id => this.herdBar.querySelector(`[data-id=${id}]`);
-      q('remove').disabled = n <= 1; q('lead').disabled = n <= 1 || w.selected === w.leader;
-      q('breed').disabled = n < 2 || n >= MAX_DRAGONS; q('clone').disabled = n >= MAX_DRAGONS;
-    }
+    this.herdEl.append(el('button', { class: 'tool', type: 'button', 'data-tip': n >= MAX_DRAGONS ? 'Herd is full' : 'Add a dragon', 'aria-label': 'Add a dragon', html: icon('plus'), disabled: n >= MAX_DRAGONS, onclick: () => this.add(Genome.random()) }));
+  }
+
+  head() {
+    const w = this.world, d = this.d; if (!d || !this.title) return;
+    this.title.textContent = d.name;
+    if (w.dragons.length > 1) this.title.append(el('small', { text: d === w.leader ? 'Leads the herd' : 'Follows the leader' }));
+    const n = w.dragons.length, q = id => this.foot.querySelector(`[data-id=${id}]`);
+    q('remove').disabled = n <= 1; q('lead').disabled = n <= 1 || d === w.leader;
+    q('breed').disabled = n < 2 || n >= MAX_DRAGONS; q('clone').disabled = n >= MAX_DRAGONS;
   }
 
   /** Reflect the selected genome in every control. */
   sync(only) {
-    const v = this.d.genome.v, dark = this.world.theme.dark;
+    const v = this.d.genome.v;
     for (const [key, c] of this.controls) {
       if (only && key !== only && c.s.type !== 'hue') continue;
       const val = v[key], s = c.s;
@@ -256,5 +261,27 @@ export class Panel {
       c.out.textContent = s.int ? String(val) : s.type === 'hue' ? Math.round(val) + '°' : (+val).toFixed(2);
       if (s.type === 'hue') c.inp.style.setProperty('--sw', hsl(val, 0.7, 0.5));
     }
+    this.dock();
+  }
+
+  // ---------------------------------------------------------------- actions
+  set(key, val) { this.d.genome.set(key, val); this.sync(key); this.saveSoon(); }
+  apply(values) { this.d.genome.patch(values); this.sync(); this.saveSoon(); }
+  add(g) { if (this.world.addDragon(g)) this.saveSoon(); }
+  breed() {
+    const ds = this.world.dragons; if (ds.length < 2) return;
+    const a = this.d, b = ds[(ds.indexOf(a) + 1) % ds.length];
+    this.add(Genome.cross(a.genome, b.genome));
+  }
+  /** A fresh random look, with a shake of the head to show off. */
+  shuffle() {
+    this.apply(Genome.random().v);
+    this.d.brain.setAction('shake'); this.world.sound.blip(true);
+  }
+  async share() {
+    const url = Store.url(this.world), b = this.foot.querySelector('[data-id=share]');
+    history.replaceState(null, '', url.slice(location.origin.length));
+    try { await navigator.clipboard.writeText(url); b.textContent = 'Copied'; } catch (_) { b.textContent = 'In address bar'; }
+    setTimeout(() => { b.textContent = 'Share'; }, 1600);
   }
 }

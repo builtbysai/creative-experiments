@@ -130,11 +130,6 @@ export class World {
     const vg = g.createRadialGradient(W / 2, H * 0.46, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.82);
     vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, T.vignette);
     g.fillStyle = vg; g.fillRect(0, 0, W, H);
-    g.strokeStyle = T.rule; g.lineWidth = 1; g.beginPath();
-    const { colX0, colX1, fs, topY } = this.page;
-    const rx0 = colX0 - fs * 0.9, rx1 = colX1 + fs * 0.9, ry0 = topY - fs * 0.8, ry1 = H - topY * 0.5;
-    g.moveTo(rx0, ry0); g.lineTo(rx0, ry1); g.moveTo(rx1, ry0); g.lineTo(rx1, ry1);
-        g.stroke();
   }
 
   // ---------------------------------------------------------------- input
@@ -169,7 +164,7 @@ export class World {
     this.page.update(dt, circs, this);
 
     const pg = this.page, pp = this.paperOn ? this.paper : null;
-    this.particles.update(dt, this.time, (q, ddt) => { pg.hit(q, this); if (pp) pp.burnAt(q.x, q.y, ddt, 10, 0.8 + 0.1 * Math.random()); });
+    this.particles.update(dt, this.time, (q, ddt) => { pg.hit(q, this); if (pp) pp.burnAt(q.x, q.y, ddt, 7, 0.8 + 0.1 * Math.random()); });
     this.paper.enabled = this.paperOn;
     this.paper.update(dt, this.paperOn ? this.particles : null);
 
@@ -223,7 +218,7 @@ export class World {
     for (const d of this.dragons) {
       if (d.breath < 0.05) continue;
       const sp = flameSprites(d.genome.v.fireHue), s = d.L * 0.26 * d.breath;
-      g.globalCompositeOperation = T.dark ? 'lighter' : 'source-over'; g.globalAlpha = (T.dark ? 0.3 : 0.24) * d.breath;
+      g.globalCompositeOperation = T.dark ? 'lighter' : 'source-over'; g.globalAlpha = (T.dark ? 0.16 : 0.2) * d.breath;
       g.drawImage(sp.glow, d.mouth.x - s, d.mouth.y - s, s * 2, s * 2);
       if (d.breath > top) { top = d.breath; hue = d.genome.v.fireHue; }
     }

@@ -4,20 +4,16 @@
 
 import { clamp, sstep, mix, rr } from './util.js';
 
-const LABEL = 'Bestiarium Ignis · f. 41 verso';
-const HEADING = 'Draco';
+const HEADING = 'Dragon';
 const TEXT = [
-  'Of all the beasts in the bestiary, the dragon is the largest and the one most often misdescribed. The old writers made it a serpent with wings. Anyone who has watched one walk will tell you it is closer to a lizard that has been taught patience: four feet set down in turn, each where the last one was meant to be, and the long spine rippling behind like a rope drawn through water.',
-  'It is born in a cold hollow of rock and keeps a single hoard, though not of gold. Gold is only what a hoard looks like from the outside. A dragon collects warmth: a seam of coal, a spring that never freezes, the floor of a forge long after the smith has gone home. Where one sleeps, snow will not lie, and shepherds drive their flocks up to the bare ground in January without asking why.',
-  'Its fire is not a weapon but a way of reading. The dragon breathes on a page the way a monk runs a finger beneath a line, slowly, and it will leave the picture untouched while it takes the words. This is why the margins of the oldest books are scorched in neat clouds, and why a careful scribe keeps one hand free, to lay flat upon the vellum anything that is trying to leave it.',
-  'Do not run. A dragon walks toward an open hand and stops a little short of it, and looks. Lead it across the page and the lines will part for its feet and close again behind it. Leave it alone and it wanders, stretches its wings, and puffs smoke from its nostrils, and now and then, when it believes nobody is watching, it reads a word.'
+  'It walks the way a lizard does: four feet set down in turn, the long spine rippling behind. It is calm, curious, and in no hurry.',
+  'Move and it follows, stopping a little short to look at you. Leave it alone and it wanders, stretches, reads a word, and sometimes falls asleep.',
+  'Hold to breathe fire. It burns the words and scorches the page, and the page slowly mends.'
 ];
-const CLOSING = 'Lead it with a finger. Hold, and it answers in fire.';
+const CLOSING = 'Add more dragons from the editor and they will flock.';
 
 const F_BODY = "Fraunces, Georgia, 'Times New Roman', serif";
-const F_MONO = "'Plex Mono', ui-monospace, Menlo, monospace";
 const STY = {
-  label: { font: s => `400 ${s * 0.62}px ${F_MONO}`, size: 0.62, lh: s => s * 0.62 * 1.9 },
   title: { font: s => `600 ${s * 2.2}px ${F_BODY}`, size: 2.2, lh: s => s * 2.2 * 1.15 },
   body: { font: s => `400 ${s}px ${F_BODY}`, size: 1, lh: s => s * 1.56 },
   closing: { font: s => `400 ${s * 0.95}px ${F_BODY}`, size: 0.95, lh: s => s * 1.56 }
@@ -28,26 +24,24 @@ export const T_FLAME = 0.6, T_CHAR = 0.5, T_ASH = 0.7, MEND = 8, MENDT = 3;
 export class Page {
   constructor() {
     this.blocks = []; this.words = [];
-    this.fs = 18; this.colX0 = 0; this.colX1 = 0; this.topY = 40; this.capW = 0; this.capSize = 0;
+    this.fs = 18; this.colX0 = 0; this.colX1 = 0; this.topY = 40;
     this.hash = new Map();
     this.build();
   }
 
   build() {
     this.blocks = []; this.words = [];
-    const add = (style, text, gap, cap) => {
-      const b = { style, gap, cap: !!cap, words: [], space: 0, capChar: '' };
+    const add = (style, text, gap) => {
+      const b = { style, gap, words: [], space: 0 };
       const toks = text.split(' ');
-      if (cap) { b.capChar = toks[0][0]; toks[0] = toks[0].slice(1); }
       for (const t of toks) {
         const w = { text: t, w: 0, x: 0, y: 0, tx: 0, ty: 0, placed: false, size: 16, burn: -1, ashed: false, fx: 0, a: 1, gen: 0, b };
         b.words.push(w); this.words.push(w);
       }
       this.blocks.push(b);
     };
-    add('label', LABEL.toUpperCase(), 0);
     add('title', HEADING, 0.4);
-    TEXT.forEach((t, i) => add('body', t, i ? 0.5 : 0.9, i === 0));
+    TEXT.forEach((t, i) => add('body', t, i ? 0.6 : 0.8));
     add('closing', CLOSING, 1.0);
   }
 
@@ -58,9 +52,6 @@ export class Page {
       b.space = g.measureText(' ').width;
       for (const w of b.words) w.w = Math.min(g.measureText(w.text).width, this.colX1 - this.colX0);
     }
-    this.capSize = fs * 3 * 1.56 * 0.98;
-    g.font = `600 ${this.capSize}px ${F_BODY}`;
-    this.capW = g.measureText(this.blocks[2].capChar).width + fs * 0.35;
   }
 
   /** Lay the words out in lines, flowing around `circs` (optional). Returns the bottom of the text. */
@@ -71,8 +62,7 @@ export class Page {
       const st = STY[b.style], size = fs * st.size, lh = st.lh(fs);
       if (!first) y += b.gap * fs * 1.56;
       first = false;
-      let wi = 0, lineNo = 0, guard = 0;
-      const capLines = b.cap ? 3 : 0;
+      let wi = 0, guard = 0;
       while (wi < b.words.length) {
         const ymid = y + lh / 2, iv = [];
         if (circs) {
@@ -81,7 +71,6 @@ export class Page {
             if (dy < R) { const hx = Math.sqrt(R * R - dy * dy); iv.push([c.x - hx, c.x + hx]); }
           }
         }
-        if (lineNo < capLines) iv.push([this.colX0 - 2, this.colX0 + this.capW]);
         iv.sort((a, c) => a[0] - c[0]);
         const runs = []; let cur = this.colX0;
         for (const [a, c] of iv) {
@@ -104,7 +93,7 @@ export class Page {
           if (wi >= b.words.length) break;
         }
         guard = placed ? 0 : guard + 1;
-        y += lh; lineNo++;
+        y += lh;
       }
     }
     return y;
@@ -113,10 +102,10 @@ export class Page {
   /** Find the biggest font that fits the viewport, then settle every word in place. */
   fit(W, H, g) {
     const pad = Math.max(18, W * 0.055);
-    let size = 21;
+    let size = 25;
     for (;;) {
       this.fs = size;
-      const colW = Math.min(W - pad * 2, size * 41);
+      const colW = Math.min(W - pad * 2, size * 32);
       this.colX0 = (W - colW) / 2; this.colX1 = this.colX0 + colW;
       this.topY = clamp(H * 0.07, 16, 72);
       this.measure(g);
@@ -124,6 +113,9 @@ export class Page {
       if (bottom <= H - Math.max(14, H * 0.045) || size <= 11.5) break;
       size -= 0.5;
     }
+    // sit the block a little above the middle of the page
+    const h = this.layout(null) - this.topY;
+    this.topY = Math.max(this.topY, (H - h) * 0.32);
     for (const w of this.words) w.placed = false;
     this.layout(null);
     for (const w of this.words) { w.x = w.tx; w.y = w.ty; w.placed = true; }
@@ -219,17 +211,12 @@ export class Page {
   draw(g, theme, clock, paper) {
     const { fs, blocks, words } = this;
     g.textBaseline = 'alphabetic';
-    g.font = `600 ${this.capSize}px ${F_BODY}`;
-    g.fillStyle = theme.initial; g.globalAlpha = 1;
-    const b2 = blocks[2], firstW = b2.words[0];
-    const capH = paper && paper.cols ? 1 - paper.holeAt(this.colX0 + 4, firstW.ty) : 1;
-    g.globalAlpha = capH;
-    g.fillText(b2.capChar, this.colX0, firstW.ty + STY.body.lh(fs) * 2 - fs * 0.05);
+    g.globalAlpha = 1;
     let curFont = '';
     for (const w of words) {
       const f = w.sty.font(fs);
       if (f !== curFont) { g.font = f; curFont = f; }
-      const ink = w.b.style === 'label' || w.b.style === 'closing' ? theme.label : theme.ink;
+      const ink = w.b.style === 'closing' ? theme.label : theme.ink;
       let col = ink, a = 1, dx = 0, dy = 0;
       if (w.burn >= 0) {
         const t = w.burn;

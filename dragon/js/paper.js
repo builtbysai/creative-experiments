@@ -17,9 +17,9 @@ import { clamp, lerp, sstep, rr, fbm, noise2, rgbOf } from './util.js';
 const INTACT = 0, FLAME = 1, CHAR = 2, HOLE = 3, MEND = 4, PATCH = 5;
 const TILE = 12;                      // cells per tile side (for the hole paths)
 const CS = 4;                         // coarse cells per scorch/light cell
-const K_SPREAD = 10;                  // how quickly a flame warms its neighbours
-const DECAY = 0.935;                  // energy kept at each hop
-const E_MIN = 0.3;                    // below this a flame cannot light its neighbours
+const K_SPREAD = 6.5;                  // how quickly a flame warms its neighbours
+const DECAY = 0.86;                  // energy kept at each hop
+const E_MIN = 0.4;                    // below this a flame cannot light its neighbours
 
 const fract = x => x - Math.floor(x);
 const hashI = i => fract(Math.sin(i * 12.9898) * 43758.5453);
@@ -115,7 +115,7 @@ export class Paper {
     this.st[i] = FLAME; this.t[i] = 0; this.en[i] = e;
     this.dur[i] = (0.26 + 0.5 * clamp(d, 0.3, 1.3)) * (0.75 + 0.5 * Math.random());
     const ci = i % this.cols, cj = (i / this.cols) | 0;
-    this.kind[i] = (e * (0.5 + 0.5 * d) + (fbm(ci * this.cs / 30, cj * this.cs / 30, 21, 3) - 0.5) * 1.0 + (Math.random() - 0.5) * 0.18 > 0.88) ? 1 : 0;
+    this.kind[i] = (e * (0.5 + 0.5 * d) + (fbm(ci * this.cs / 30, cj * this.cs / 30, 21, 3) - 0.5) * 1.0 + (Math.random() - 0.5) * 0.18 > 0.92) ? 1 : 0;
     this._add(i); this.stats.ignitions++;
   }
 
@@ -125,7 +125,7 @@ export class Paper {
     const i = this.cellAt(x, y); if (i < 0) return;
     const cols = this.cols;
     this._heat(i, dt * power * this.dry[i], energy);
-    for (const o of [-1, 1, -cols, cols]) { const k = i + o; if (k >= 0 && k < this.st.length) this._heat(k, dt * power * 0.55 * this.dry[k], energy * 0.95); }
+    for (const o of [-1, 1, -cols, cols]) { const k = i + o; if (k >= 0 && k < this.st.length) this._heat(k, dt * power * 0.3 * this.dry[k], energy * 0.9); }
   }
 
   /** Set light to a whole patch at once (a word catching fire). */
@@ -134,7 +134,7 @@ export class Paper {
     const cs = this.cs, i0 = Math.floor((x - r) / cs), i1 = Math.floor((x + r) / cs), j0 = Math.floor((y - r) / cs), j1 = Math.floor((y + r) / cs);
     for (let j = Math.max(0, j0); j <= Math.min(this.rows - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(this.cols - 1, i1); i++) {
       const dx = (i + 0.5) * cs - x, dy = (j + 0.5) * cs - y;
-      if (dx * dx + dy * dy < r * r && Math.random() < 0.6) this._heat(j * this.cols + i, 1.2, energy);
+      if (dx * dx + dy * dy < r * r && Math.random() < 0.45) this._heat(j * this.cols + i, 1.2, energy);
     }
   }
 
@@ -199,7 +199,7 @@ export class Paper {
         if (c[i] < 1) { c[i] = Math.min(1, c[i] + dt / 0.55); this._dirty(i); }
         if (t[i] > mendAt[i] && this.mendEnabled !== false) { st[i] = MEND; t[i] = 0; }
       } else if (s === PATCH) {
-        if (t[i] > mendAt[i] * 0.85 && this.mendEnabled !== false) { st[i] = MEND; t[i] = 0; }
+        if (t[i] > mendAt[i] * 0.55 && this.mendEnabled !== false) { st[i] = MEND; t[i] = 0; }
       } else if (s === MEND) {
         c[i] -= dt / 1.3;
         if (kind[i]) this._dirty(i);
@@ -276,7 +276,10 @@ export class Paper {
       return pack(lerp(r, 255, g), lerp(gg, 90, g), lerp(b, 20, g), 255);
     }
     if (s === HOLE) { const a = 1 - this.c[i]; return a > 0.01 ? pack(lerp(as[0], ch[0], 0.55), lerp(as[1], ch[1], 0.55), lerp(as[2], ch[2], 0.55), 255 * a) : 0; }
-    if (s === PATCH) { const m = clamp(u / 10, 0, 1) * 0.35; return pack(lerp(ch[0], sc[0], m), lerp(ch[1], sc[1], m), lerp(ch[2], sc[2], m), 238); }
+    if (s === PATCH) {                          // a toasted brown scorch that slowly lightens, never a black slab
+      const m = clamp(u / Math.max(1, this.mendAt[i]), 0, 1), nz = 0.96 + 0.08 * hashI(i + 7.7);
+      return pack(lerp(ch[0], sc[0], 0.55 + 0.3 * m) * nz, lerp(ch[1], sc[1], 0.55 + 0.3 * m) * nz, lerp(ch[2], sc[2], 0.55 + 0.3 * m) * nz, 200 - 90 * m);
+    }
     if (s === MEND) {
       const cc = clamp(this.c[i], 0, 1);
       if (this.kind[i]) {                       // knitting back: a sparkle runs through the seam
@@ -294,10 +297,10 @@ export class Paper {
     g.save();
     g.imageSmoothingEnabled = true;
     // 1. scorch halo: overlapping soft brown sprites, so it has no visible grid
-    const spr = this.scorchSprite(theme), sz = cs * CS * 1.9, cw = this.cw, sc = this.scorch;
+    const spr = this.scorchSprite(theme), sz = cs * CS * 1.2, cw = this.cw, sc = this.scorch;
     for (let j = 0; j < this.ch; j++) for (let i = 0; i < cw; i++) {
       const v = sc[j * cw + i]; if (v < 0.03) continue;
-      g.globalAlpha = Math.min(1, v) * (theme.dark ? 0.42 : 0.4);
+      g.globalAlpha = Math.min(1, v) * (theme.dark ? 0.36 : 0.32);
       g.drawImage(spr, (i + 0.5) * cs * CS - sz, (j + 0.5) * cs * CS - sz, sz * 2, sz * 2);
     }
     g.globalAlpha = 1;
