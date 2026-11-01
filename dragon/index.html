@@ -104,9 +104,10 @@ const isDark = () => T === THEMES.dark;
 const LABEL = 'Bestiarium Ignis · f. 41 verso';
 const HEADING = 'Draco';
 const TEXT = [
-  'The wyrm had slept under the abbey for longer than the abbey had stood, and the monks knew it only as a warmth in the cellar floor that kept the wine from freezing. Brother Anselm, who was sent down each winter to count the casks, swore that the stones hummed. Nobody believed him until the spring the floor split along the aisle.',
-  'It came up through the nave like smoke rising, slow and broad in the shoulder, and the candles leaned toward it. The scribes did not flee. They had spent their lives drawing such creatures in the margins, in red lead and gold, and it seemed only courteous to be seen working when one arrived. The page parted for its feet. The lines of the psalter bent around its claws and settled again behind.',
-  'The old bestiaries agree that a dragon does not hunt for hunger but for company, and that it burns whatever it cannot read. This is why the margins of the oldest books are so often scorched, and why a careful copyist keeps one hand free, to lay flat upon the vellum anything that is trying to leave it.'
+  'Of all the beasts in the bestiary, the dragon is the largest and the one most often misdescribed. The old writers made it a serpent with wings. Anyone who has watched one walk will tell you it is closer to a lizard that has been taught patience: four feet set down in turn, each where the last one was meant to be, and the long spine rippling behind like a rope drawn through water.',
+  'It is born in a cold hollow of rock and keeps a single hoard, though not of gold. Gold is only what a hoard looks like from the outside. A dragon collects warmth: a seam of coal, a spring that never freezes, the floor of a forge long after the smith has gone home. Where one sleeps, snow will not lie, and shepherds drive their flocks up to the bare ground in January without asking why.',
+  'Its fire is not a weapon but a way of reading. The dragon breathes on a page the way a monk runs a finger beneath a line, slowly, and it will leave the picture untouched while it takes the words. This is why the margins of the oldest books are scorched in neat clouds, and why a careful scribe keeps one hand free, to lay flat upon the vellum anything that is trying to leave it.',
+  'Do not run. A dragon walks toward an open hand and stops a little short of it, and looks. Lead it across the page and the lines will part for its feet and close again behind it. Leave it alone and it wanders, stretches its wings, and puffs smoke from its nostrils, and now and then, when it believes nobody is watching, it reads a word.'
 ];
 const CLOSING = 'Lead it with a finger. Hold, and it answers in fire.';
 
@@ -405,7 +406,7 @@ function initDragon(enter) {
 // foot never moves. The swing target is the neutral foothold plus a lead proportional to speed, and tracks the
 // body live, so the stride always matches the motion. Legs are slim; front elbows point back, hind knees forward.
 const LEGCFG = {
-  front: { a: 0.060, b: 0.054, lat: 0.1, fw: 0.058 },
+  front: { a: 0.062, b: 0.058, lat: 0.106, fw: 0.044 },
   hind: { a: 0.068, b: 0.060, lat: 0.108, fw: -0.004 }
 };
 function updateLegs(dt) {
@@ -460,13 +461,13 @@ function wingGeom(side) {
   const fx = sg.tx, fy = sg.ty, nx = sg.nx * side, ny = sg.ny * side;
   const fl = Math.sin(D.wphase + (side > 0 ? 0.35 : 0)) * D.flap;
   const dir = th => [fx * Math.cos(th) + nx * Math.sin(th), fy * Math.cos(th) + ny * Math.sin(th)];
-  const armTh = lerp(2.96, 1.15, o) + fl * 0.5, armL = L * 0.18 * lerp(0.5, 1, o);
+  const armTh = lerp(3.02, 1.15, o) + fl * 0.5, armL = L * 0.18 * lerp(0.5, 1, o);
   const ad = dir(armTh), Wx = Sx + ad[0] * armL, Wy = Sy + ad[1] * armL;
-  const foldA = [3.03, 3.08, 3.12, 3.15], openA = [0.8, 1.3, 1.78, 2.26], lens = [0.30, 0.35, 0.32, 0.25];
+  const foldA = [3.10, 3.22, 3.34, 3.46], openA = [0.8, 1.3, 1.78, 2.26], lens = [0.30, 0.35, 0.32, 0.25];
   const tips = [], ctr = [];
   for (let i = 0; i < 4; i++) {
     const e = sstep(0.03 * i, 0.78 + 0.03 * i, o);
-    const th = lerp(foldA[i], openA[i], e) + fl * (0.35 + 0.15 * i), len = lens[i] * L * lerp(0.4, 1, e);
+    const th = lerp(foldA[i], openA[i], e) + fl * (0.35 + 0.15 * i), len = lens[i] * L * lerp(0.46, 1, e);
     const dd = dir(th), tx = Wx + dd[0] * len, ty = Wy + dd[1] * len;
     const bow = 0.1 * len * (0.3 + 0.7 * e);
     tips.push([tx, ty]); ctr.push([(Wx + tx) / 2 + fx * bow, (Wy + ty) / 2 + fy * bow]);
@@ -639,9 +640,21 @@ function update(dt) {
   circs.length = 0;
   for (let j = 0; j < M; j += 2) { const g = S[j]; circs.push({ x: g.x, y: g.y, r: g.hw * 1.06 }); }
   { const g = S[M - 1]; circs.push({ x: g.x, y: g.y, r: Math.max(g.hw, 3) }); }
-  circs.push({ x: hx + Math.cos(hd) * L * 0.05, y: hy + Math.sin(hd) * L * 0.05, r: L * 0.05 });
-  circs.push({ x: hx + Math.cos(hd) * L * 0.105, y: hy + Math.sin(hd) * L * 0.105, r: L * 0.03 });
-  for (const l of D.legs) circs.push({ x: l.ex, y: l.ey, r: L * 0.03 });
+  {
+    const hc = Math.cos(hd), hs = Math.sin(hd);
+    circs.push({ x: hx + hc * L * 0.03, y: hy + hs * L * 0.03, r: L * 0.062 });
+    circs.push({ x: hx + hc * L * 0.1, y: hy + hs * L * 0.1, r: L * 0.034 });
+    for (const sd of [-1, 1]) {                                   // horns and ear frills sweep out sideways and back
+      circs.push({ x: hx - hc * L * 0.05 - hs * sd * L * 0.06, y: hy - hs * L * 0.05 + hc * sd * L * 0.06, r: L * 0.04 });
+      circs.push({ x: hx - hc * L * 0.01 - hs * sd * L * 0.085, y: hy - hs * L * 0.01 + hc * sd * L * 0.085, r: L * 0.026 });
+    }
+  }
+  for (const l of D.legs) {
+    circs.push({ x: l.ex, y: l.ey, r: L * 0.034 });
+    circs.push({ x: l.kx, y: l.ky, r: L * 0.026 });
+    circs.push({ x: (l.kx + l.ex) / 2, y: (l.ky + l.ey) / 2, r: L * 0.022 });
+    circs.push({ x: (l.kx + l.ax) / 2, y: (l.ky + l.ay) / 2, r: L * 0.026 });
+  }
   layout(true);
   const kx = 1 - Math.exp(-dt * 34);
   for (const w of words) {
@@ -893,24 +906,33 @@ function drawLegs() {
   for (const l of D.legs) {
     const lift = l.lift, sc = 1 + lift * 0.14;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    // foot: toes fanned around the direction of the lower leg, leaning toward the body's heading
+    // foot: rounded toes fanned around the direction of the lower leg, leaning toward the body's heading
     const Fa = Math.atan2(l.ey - l.ky, l.ex - l.kx), Lb = Math.atan2(l.ty, l.tx);
-    const k = Lb + 0.55 * angDiff(Fa, Lb), fan = l.front ? 1.5 : 1.75, nT = l.front ? 4 : 5;
-    const E = 1 + 0.22 * l.lift, tw = L * 0.016 * E;
-    ctx.fillStyle = T.skin; ctx.strokeStyle = T.rim; ctx.lineWidth = lw;
+    const k = Lb + 0.55 * angDiff(Fa, Lb), fan = l.front ? 1.45 : 1.7, nT = l.front ? 4 : 5;
+    const E = 1 + 0.2 * l.lift, tw = L * (l.front ? 0.0145 : 0.0135) * E;
+    const toe = [];
     for (let c = 0; c < nT; c++) {
-      const o = c / (nT - 1) - 0.5, a = k + o * fan, len = L * (l.front ? 0.034 : 0.04) * (1 - 0.4 * Math.abs(o)) * E;
-      const px = -Math.sin(a), py = Math.cos(a), bx = l.ex + Math.cos(Fa) * L * 0.004, by = l.ey + Math.sin(Fa) * L * 0.004;
-      const tx = bx + Math.cos(a) * len, ty = by + Math.sin(a) * len;
-      ctx.beginPath();
-      ctx.moveTo(bx + px * tw * 0.5, by + py * tw * 0.5); ctx.lineTo(tx + px * tw * 0.22, ty + py * tw * 0.22);
-      ctx.lineTo(tx - px * tw * 0.22, ty - py * tw * 0.22); ctx.lineTo(bx - px * tw * 0.5, by - py * tw * 0.5);
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = T.horn; ctx.beginPath();
-      ctx.moveTo(tx + px * tw * 0.22, ty + py * tw * 0.22); ctx.lineTo(tx + Math.cos(a) * L * 0.015, ty + Math.sin(a) * L * 0.015);
-      ctx.lineTo(tx - px * tw * 0.22, ty - py * tw * 0.22); ctx.closePath(); ctx.fill(); ctx.fillStyle = T.skin;
+      const o = c / (nT - 1) - 0.5, a = k + o * fan, len = L * (l.front ? 0.034 : 0.038) * (1 - 0.35 * Math.abs(o)) * E;
+      toe.push({ a, bx: l.ex + Math.cos(Fa) * L * 0.004, by: l.ey + Math.sin(Fa) * L * 0.004, len });
     }
-    ctx.beginPath(); ctx.arc(l.ex + Math.cos(Fa) * L * 0.003, l.ey + Math.sin(Fa) * L * 0.003, L * 0.017 * E, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.lineCap = 'round';
+    for (const pass of [0, 1]) {                       // outline pass, then fill pass: toes read as one soft shape
+      ctx.strokeStyle = pass ? T.skin : T.rim;
+      for (const t of toe) {
+        ctx.lineWidth = tw + (pass ? 0 : lw * 2);
+        ctx.beginPath(); ctx.moveTo(t.bx, t.by); ctx.lineTo(t.bx + Math.cos(t.a) * t.len, t.by + Math.sin(t.a) * t.len); ctx.stroke();
+      }
+      ctx.fillStyle = pass ? T.skin : T.rim;
+      ctx.beginPath(); ctx.arc(l.ex, l.ey, L * 0.0098 * E + (pass ? 0 : lw), 0, TAU); ctx.fill();
+    }
+    for (const t of toe) {                              // small dark claws at the tips
+      const ex = t.bx + Math.cos(t.a) * (t.len + tw * 0.35), ey = t.by + Math.sin(t.a) * (t.len + tw * 0.35);
+      const px = -Math.sin(t.a), py = Math.cos(t.a);
+      ctx.fillStyle = T.horn; ctx.strokeStyle = T.rim; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(ex + px * tw * 0.3, ey + py * tw * 0.3);
+      ctx.lineTo(ex + Math.cos(t.a) * L * 0.011, ey + Math.sin(t.a) * L * 0.011); ctx.lineTo(ex - px * tw * 0.3, ey - py * tw * 0.3);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
     // limb silhouette
     const p = new Path2D(), c = legOutline(l, p);
     const gr = ctx.createLinearGradient(l.ax, l.ay, l.ex, l.ey);
@@ -1064,7 +1086,7 @@ function drawWing(g) {
   }
   ctx.stroke();
   // bones: arm + four curved fingers, with a highlight edge
-  const arm = [[g.S[0], g.S[1], (g.S[0] + g.W[0]) / 2 + g.f[0] * L * 0.012, (g.S[1] + g.W[1]) / 2 + g.f[1] * L * 0.012, g.W[0], g.W[1], Math.max(3, L * 0.013)]];
+  const arm = [[g.S[0], g.S[1], (g.S[0] + g.W[0]) / 2 + g.f[0] * L * 0.012, (g.S[1] + g.W[1]) / 2 + g.f[1] * L * 0.012, g.W[0], g.W[1], Math.max(2.4, L * 0.013 * lerp(0.6, 1, g.o))]];
   for (let i = 0; i < 4; i++) arm.push([g.W[0], g.W[1], g.ctr[i][0], g.ctr[i][1], g.tips[i][0], g.tips[i][1], Math.max(1.4, L * (0.0075 - i * 0.0011))]);
   for (const [x0, y0, cx, cy, x1, y1, lw] of arm) {
     ctx.strokeStyle = T.wingVein; ctx.lineWidth = lw;
@@ -1076,10 +1098,11 @@ function drawWing(g) {
   const cd = g.dir(g.armTh - 0.9);
   ctx.fillStyle = T.horn; ctx.strokeStyle = T.rim; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(g.W[0] - g.n[1] * 3.2, g.W[1] + g.n[0] * 3.2);
-  ctx.quadraticCurveTo(g.W[0] + cd[0] * L * 0.02, g.W[1] + cd[1] * L * 0.02 + 1, g.W[0] + cd[0] * L * 0.046, g.W[1] + cd[1] * L * 0.046);
+  ctx.quadraticCurveTo(g.W[0] + cd[0] * L * 0.02 * lerp(0.25, 1, g.o), g.W[1] + cd[1] * L * 0.02 * lerp(0.25, 1, g.o) + 1, g.W[0] + cd[0] * L * 0.046 * lerp(0.25, 1, g.o), g.W[1] + cd[1] * L * 0.046 * lerp(0.25, 1, g.o));
   ctx.lineTo(g.W[0] + g.n[1] * 3.2, g.W[1] - g.n[0] * 3.2); ctx.closePath(); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = T.skin; ctx.beginPath(); ctx.arc(g.W[0], g.W[1], Math.max(3.2, L * 0.012), 0, TAU); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = T.skin; ctx.beginPath(); ctx.arc(g.S[0], g.S[1], Math.max(3.4, L * 0.014), 0, TAU); ctx.fill(); ctx.stroke();
+  const kn = lerp(0.62, 1, g.o);
+  ctx.fillStyle = T.skin; ctx.beginPath(); ctx.arc(g.W[0], g.W[1], Math.max(2.4, L * 0.012 * kn), 0, TAU); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = T.skin; ctx.beginPath(); ctx.arc(g.S[0], g.S[1], Math.max(2.6, L * 0.014 * kn), 0, TAU); ctx.fill(); ctx.stroke();
 }
 
 function drawHead() {
