@@ -400,43 +400,60 @@ function initDragon(enter) {
 }
 
 // ---------- legs: diagonal trot with prediction, two-bone IK ----------
+// Gait follows the research on walking salamanders/lizards: a trot where diagonal pairs move together,
+// each foot on a phase clock (swing for ~38% of the cycle, planted for the rest), phase driven by distance
+// travelled so stride always matches ground speed. A foot already in the air always completes its step.
+const DUTY = 0.62, SWING = 1 - DUTY;
 function updateLegs(dt) {
   const vc = 0.46 * L, vk = clamp(D.v / vc, 0, 1);
-  const A = L * 0.092, B = L * 0.1, reach = (A + B) * 0.96;
+  const A = L * 0.088, B = L * 0.094, reach = (A + B) * 0.97;
+  const cyc = D.phase / TAU;
   for (const l of D.legs) {
     const g = gAt(l.frac);
-    l.ax = g.x + g.nx * l.side * g.hw * 0.8; l.ay = g.y + g.ny * l.side * g.hw * 0.8;
-    l.hx = l.ax + g.nx * l.side * L * 0.085 + g.tx * (l.front ? 0.02 : -0.012) * L;
-    l.hy = l.ay + g.ny * l.side * L * 0.085 + g.ty * (l.front ? 0.02 : -0.012) * L;
-    const lead = L * 0.095 * vk;
+    // the girdle sways: the shoulder or hip on the stepping side slides forward a little
+    const sway = Math.sin(D.phase + (l.front ? 0 : PI)) * L * 0.014 * vk * l.side;
+    l.ax = g.x + g.nx * l.side * g.hw * 0.8 + g.tx * sway; l.ay = g.y + g.ny * l.side * g.hw * 0.8 + g.ty * sway;
+    const lat = L * 0.062;
+    l.hx = l.ax + g.nx * l.side * lat + g.tx * (l.front ? 0.018 : -0.012) * L;
+    l.hy = l.ay + g.ny * l.side * lat + g.ty * (l.front ? 0.018 : -0.012) * L;
+    const lead = L * 0.1 * vk;
     l.tgx = l.hx + g.tx * lead; l.tgy = l.hy + g.ty * lead;
     l.tx = g.tx; l.ty = g.ty; l.nx = g.nx; l.ny = g.ny;
   }
   if (dt <= 0) { for (const l of D.legs) { if (!l.fx) { l.fx = l.tgx; l.fy = l.tgy; } solveLeg(l, A, B); } return; }
-  let swingPair = -1;
+  const start = l => { l.sw = { t: 0, tt: 0, dur: lerp(0.4, 0.2, vk), x0: l.fx, y0: l.fy }; D.steps++; };
+  let anySwing = false;
   for (const l of D.legs) {
-    if (!l.sw) continue;
-    l.sw.t += dt / l.sw.dur;
-    const t = Math.min(1, l.sw.t), e = sstep(0, 1, t);
-    const arc = Math.sin(t * PI) * L * 0.028 * l.side;
-    l.fx = lerp(l.sw.x0, l.tgx, e) + l.nx * arc; l.fy = lerp(l.sw.y0, l.tgy, e) + l.ny * arc;
-    l.lift = Math.sin(t * PI);
-    // the foot turns to face where it will land, and then stays put on the ground
-    const want = Math.atan2(l.ty, l.tx) + l.side * 0.38;
-    let da = want - l.fang; da = Math.atan2(Math.sin(da), Math.cos(da));
-    l.fang += da * (1 - Math.exp(-dt * 16));
-    if (l.sw.t >= 1) { l.sw = null; l.lift = 0; l.fx = l.tgx; l.fy = l.tgy; l.land = clock; }
-    else swingPair = l.pair;
+    // where this pair is on the gait clock (0..1); the first SWING of it is the swing phase
+    const psi = ((cyc + l.pair * 0.5) % 1 + 1) % 1;
+    const inWindow = psi < SWING;
+    if (!inWindow) l.armed = true;
+    if (vk > 0.08 && inWindow && l.armed && !l.sw) { l.armed = false; start(l); }
+    if (l.sw) {
+      l.sw.tt += dt / l.sw.dur;
+      const uPhase = vk > 0.08 && inWindow ? psi / SWING : 0;
+      l.sw.t = Math.max(l.sw.t, uPhase, l.sw.tt);
+      const t = Math.min(1, l.sw.t);
+      // quick lift-off, long reach, soft landing
+      const e = t * t * t * (t * (6 * t - 15) + 10);
+      const arc = Math.sin(t * PI) * L * 0.03 * l.side;
+      l.fx = lerp(l.sw.x0, l.tgx, e) + l.nx * arc; l.fy = lerp(l.sw.y0, l.tgy, e) + l.ny * arc;
+      l.lift = Math.pow(Math.sin(t * PI), 0.8);
+      const want = Math.atan2(l.ty, l.tx) + l.side * 0.38;
+      let da = want - l.fang; da = Math.atan2(Math.sin(da), Math.cos(da));
+      l.fang += da * (1 - Math.exp(-dt * 16));
+      if (l.sw.t >= 1) { l.sw = null; l.lift = 0; l.fx = l.tgx; l.fy = l.tgy; l.land = clock; }
+      else anySwing = true;
+    }
   }
-  const thr = L * (0.1 + 0.1 * vk);
-  const start = l => { l.sw = { t: 0, dur: lerp(0.32, 0.18, vk), x0: l.fx, y0: l.fy }; D.steps++; };
-  if (swingPair < 0) {
-    let best = null, bd = thr;
+  // slow shuffling / turning on the spot: step the pair that is furthest from comfortable
+  if (vk <= 0.08 && !anySwing) {
+    const thr = L * 0.1; let best = null, bd = thr;
     for (const l of D.legs) { const d = Math.hypot(l.fx - l.tgx, l.fy - l.tgy); l.def = d; if (d > bd) { bd = d; best = l; } }
     if (best) for (const l of D.legs) if (l.pair === best.pair && !l.sw && (l === best || l.def > thr * 0.5)) start(l);
   }
   for (const l of D.legs) {
-    if (!l.sw && Math.hypot(l.fx - l.ax, l.fy - l.ay) > reach) start(l);
+    if (!l.sw && Math.hypot(l.fx - l.ax, l.fy - l.ay) > reach) start(l);   // over-stretched: emergency step
     solveLeg(l, A, B);
   }
 }
@@ -758,7 +775,7 @@ function limbPath(ax, ay, bx, by, wa, wm, wb, p) {
 }
 
 // A leg as one smooth silhouette: thigh muscle, narrow knee, tapering shin, ankle.
-const LEG_PROFILE = [[0, 0.050], [0.16, 0.066], [0.34, 0.062], [0.5, 0.036], [0.62, 0.040], [0.8, 0.030], [1, 0.021]];
+const LEG_PROFILE = [[0, 0.046], [0.16, 0.058], [0.34, 0.052], [0.5, 0.032], [0.62, 0.034], [0.8, 0.026], [1, 0.019]];
 function legCurve(l, n) {
   const pts = [];
   for (let i = 0; i <= n; i++) {
@@ -1353,12 +1370,12 @@ window.__dragon = {
       const before = D.steps; update(1 / hz);
       let len = 0; for (let k = 1; k < N; k++) len += Math.hypot(C[k].x - C[k - 1].x, C[k].y - C[k - 1].y);
       let minSep = 1e9; for (let a = 0; a < N; a++) for (let b = a + 8; b < N; b++) minSep = Math.min(minSep, Math.hypot(C[a].x - C[b].x, C[a].y - C[b].y));
-      let stretch = 0; for (const l of D.legs) stretch = Math.max(stretch, Math.hypot(l.ex - l.ax, l.ey - l.ay) / (L * 0.192));
+      let stretch = 0; for (const l of D.legs) stretch = Math.max(stretch, Math.hypot(l.ex - l.ax, l.ey - l.ay) / (L * 0.182));
       out.push([i / hz, D.x, D.y, D.h, D.v, D.w, len, minSep, D.steps - before, stretch, D.headYaw, D.mode]);
     }
     draw(); return out;
   },
-  state() { return { x: D.x, y: D.y, h: D.h, v: D.v, w: D.w, breath: D.breath, wing: D.wing, parts: parts.length, burning: words.filter(w => w.burn >= 0).length, words: words.length, fs, W, H, L, steps: D.steps, mode: D.mode }; }
+  state() { return { x: D.x, y: D.y, h: D.h, v: D.v, w: D.w, breath: D.breath, wing: D.wing, parts: parts.length, burning: words.filter(w => w.burn >= 0).length, words: words.length, fs, W, H, L, steps: D.steps, mode: D.mode, legs: D.legs.map(l => ({ sw: !!l.sw, ex: l.ex, ey: l.ey, ax: l.ax, ay: l.ay, pair: l.pair })) }; }
 };
 })();
 </script>
