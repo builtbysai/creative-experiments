@@ -394,78 +394,59 @@ function initDragon(enter) {
     return l;
   });
   updateLegs(0);
-  for (const l of D.legs) { l.fx = l.tgx; l.fy = l.tgy; l.fang = Math.atan2(l.ty, l.tx) + l.side * 0.38; }
+  for (const l of D.legs) { l.fx = l.px; l.fy = l.py; }
   updateLegs(0);
   initialised = true;
 }
 
 // ---------- legs: diagonal trot with prediction, two-bone IK ----------
-// Gait follows the research on walking salamanders/lizards: a trot where diagonal pairs move together,
-// each foot on a phase clock (swing for ~38% of the cycle, planted for the rest), phase driven by distance
-// travelled so stride always matches ground speed. A foot already in the air always completes its step.
-const DUTY = 0.62, SWING = 1 - DUTY;
+// Gait, learned from the salamander engine: no per-foot timers. One gait phase advances with distance walked;
+// the first half of each cycle one diagonal pair swings while the other is planted, then they trade. A planted
+// foot never moves. The swing target is the neutral foothold plus a lead proportional to speed, and tracks the
+// body live, so the stride always matches the motion. Legs are slim; front elbows point back, hind knees forward.
+const LEGCFG = {
+  front: { a: 0.072, b: 0.064, lat: 0.115, fw: 0.042 },
+  hind: { a: 0.078, b: 0.068, lat: 0.113, fw: -0.004 }
+};
 function updateLegs(dt) {
-  const vc = 0.46 * L, vk = clamp(D.v / vc, 0, 1);
-  const A = L * 0.088, B = L * 0.094, reach = (A + B) * 0.97;
-  const cyc = D.phase / TAU;
+  const vc = 0.46 * L, kv = clamp(D.v / vc * 1.6, 0, 1);
+  const ph = ((D.phase % TAU) + TAU) % TAU;
   for (const l of D.legs) {
+    const c = l.front ? LEGCFG.front : LEGCFG.hind;
     const g = gAt(l.frac);
-    // the girdle sways: the shoulder or hip on the stepping side slides forward a little
-    const sway = Math.sin(D.phase + (l.front ? 0 : PI)) * L * 0.014 * vk * l.side;
-    l.ax = g.x + g.nx * l.side * g.hw * 0.8 + g.tx * sway; l.ay = g.y + g.ny * l.side * g.hw * 0.8 + g.ty * sway;
-    const lat = L * 0.062;
-    l.hx = l.ax + g.nx * l.side * lat + g.tx * (l.front ? 0.018 : -0.012) * L;
-    l.hy = l.ay + g.ny * l.side * lat + g.ty * (l.front ? 0.018 : -0.012) * L;
-    const lead = L * 0.1 * vk;
-    l.tgx = l.hx + g.tx * lead; l.tgy = l.hy + g.ty * lead;
+    l.A = L * c.a; l.B = L * c.b;
+    l.ax = g.x + g.nx * l.side * g.hw * 0.62; l.ay = g.y + g.ny * l.side * g.hw * 0.62;
+    l.px = g.x + g.nx * l.side * L * c.lat + g.tx * L * c.fw;          // neutral foothold
+    l.py = g.y + g.ny * l.side * L * c.lat + g.ty * L * c.fw;
     l.tx = g.tx; l.ty = g.ty; l.nx = g.nx; l.ny = g.ny;
-  }
-  if (dt <= 0) { for (const l of D.legs) { if (!l.fx) { l.fx = l.tgx; l.fy = l.tgy; } solveLeg(l, A, B); } return; }
-  const start = l => { l.sw = { t: 0, tt: 0, dur: lerp(0.4, 0.2, vk), x0: l.fx, y0: l.fy }; D.steps++; };
-  let anySwing = false;
-  for (const l of D.legs) {
-    // where this pair is on the gait clock (0..1); the first SWING of it is the swing phase
-    const psi = ((cyc + l.pair * 0.5) % 1 + 1) % 1;
-    const inWindow = psi < SWING;
-    if (!inWindow) l.armed = true;
-    if (vk > 0.08 && inWindow && l.armed && !l.sw) { l.armed = false; start(l); }
-    if (l.sw) {
-      l.sw.tt += dt / l.sw.dur;
-      const uPhase = vk > 0.08 && inWindow ? psi / SWING : 0;
-      l.sw.t = Math.max(l.sw.t, uPhase, l.sw.tt);
-      const t = Math.min(1, l.sw.t);
-      // quick lift-off, long reach, soft landing
-      const e = t * t * t * (t * (6 * t - 15) + 10);
-      const arc = Math.sin(t * PI) * L * 0.03 * l.side;
-      l.fx = lerp(l.sw.x0, l.tgx, e) + l.nx * arc; l.fy = lerp(l.sw.y0, l.tgy, e) + l.ny * arc;
-      l.lift = Math.pow(Math.sin(t * PI), 0.8);
-      const want = Math.atan2(l.ty, l.tx) + l.side * 0.38;
-      let da = want - l.fang; da = Math.atan2(Math.sin(da), Math.cos(da));
-      l.fang += da * (1 - Math.exp(-dt * 16));
-      if (l.sw.t >= 1) { l.sw = null; l.lift = 0; l.fx = l.tgx; l.fy = l.tgy; l.land = clock; }
-      else anySwing = true;
+    if (!l.fx) { l.fx = l.px; l.fy = l.py; }
+    if (dt <= 0) { l.sw = null; l.lift = 0; l.fx = l.px; l.fy = l.py; solveLeg(l, l.A, l.B); continue; }
+    const first = l.pair === 0;
+    const swinging = first ? ph < PI : ph >= PI;
+    const x = first ? ph / PI : (ph - PI) / PI;
+    if (swinging) {
+      if (!l.sw) { l.sw = { x0: l.fx, y0: l.fy }; D.steps++; }
+      const lead = L * 0.065 * kv;
+      const tgx = l.px + g.tx * lead, tgy = l.py + g.ty * lead, e = x * x * (3 - 2 * x);
+      l.fx = lerp(l.sw.x0, tgx, e); l.fy = lerp(l.sw.y0, tgy, e);
+      l.lift = Math.sin(PI * clamp(x, 0, 1));
+    } else {
+      l.sw = null; l.lift = 0;
+      if (Math.hypot(l.fx - l.px, l.fy - l.py) > L * 0.24) { l.fx = l.px; l.fy = l.py; }
     }
-  }
-  // slow shuffling / turning on the spot: step the pair that is furthest from comfortable
-  if (vk <= 0.08 && !anySwing) {
-    const thr = L * 0.1; let best = null, bd = thr;
-    for (const l of D.legs) { const d = Math.hypot(l.fx - l.tgx, l.fy - l.tgy); l.def = d; if (d > bd) { bd = d; best = l; } }
-    if (best) for (const l of D.legs) if (l.pair === best.pair && !l.sw && (l === best || l.def > thr * 0.5)) start(l);
-  }
-  for (const l of D.legs) {
-    if (!l.sw && Math.hypot(l.fx - l.ax, l.fy - l.ay) > reach) start(l);   // over-stretched: emergency step
-    solveLeg(l, A, B);
+    solveLeg(l, l.A, l.B);
   }
 }
 function solveLeg(l, A, B) {
   const dx = l.fx - l.ax, dy = l.fy - l.ay, d0 = Math.hypot(dx, dy) || 1;
-  const d = clamp(d0, Math.abs(A - B) + 2, A + B - 1), ux = dx / d0, uy = dy / d0;
+  const d = clamp(d0, Math.abs(A - B) + 1, (A + B) * 0.995), ux = dx / d0, uy = dy / d0;
   const x = (A * A - B * B + d * d) / (2 * d), h = Math.sqrt(Math.max(0, A * A - x * x));
   const k1x = l.ax + ux * x - uy * h, k1y = l.ay + uy * x + ux * h;
   const k2x = l.ax + ux * x + uy * h, k2y = l.ay + uy * x - ux * h;
-  const ox = l.nx * l.side, oy = l.ny * l.side;
-  const s1 = (k1x - l.ax) * ox + (k1y - l.ay) * oy, s2 = (k2x - l.ax) * ox + (k2y - l.ay) * oy;
-  if (s1 > s2) { l.kx = k1x; l.ky = k1y; } else { l.kx = k2x; l.ky = k2y; }
+  const f1 = (k1x - l.ax) * l.tx + (k1y - l.ay) * l.ty, f2 = (k2x - l.ax) * l.tx + (k2y - l.ay) * l.ty;
+  // front limbs: elbow points back; hind limbs: knee points forward
+  const pickFirst = l.front ? f1 < f2 : f1 > f2;
+  if (pickFirst) { l.kx = k1x; l.ky = k1y; } else { l.kx = k2x; l.ky = k2y; }
   l.ex = l.ax + ux * d; l.ey = l.ay + uy * d;
 }
 
@@ -571,7 +552,10 @@ function update(dt) {
   D.x += Math.cos(D.h) * stepLen; D.y += Math.sin(D.h) * stepLen;
   D.x = clamp(D.x, -L * 0.7, W + L * 0.3); D.y = clamp(D.y, -L * 0.3, H + L * 0.3);
   D.dist += stepLen;
-  D.phase = (D.dist / (0.26 * L)) * TAU;
+  let dph = (stepLen / (0.26 * L)) * TAU;
+  const uph = ((D.phase % PI) + PI) % PI;
+  if (dph < 1e-4 && uph > 0.001) dph = Math.min(3.5 * dt, PI - uph);   // a foot in the air always lands
+  D.phase += dph;
   pushTrail();
   buildGeometry();
 
@@ -775,7 +759,7 @@ function limbPath(ax, ay, bx, by, wa, wm, wb, p) {
 }
 
 // A leg as one smooth silhouette: thigh muscle, narrow knee, tapering shin, ankle.
-const LEG_PROFILE = [[0, 0.046], [0.16, 0.058], [0.34, 0.052], [0.5, 0.032], [0.62, 0.034], [0.8, 0.026], [1, 0.019]];
+const LEG_PROFILE = [[0, 0.050], [0.2, 0.054], [0.46, 0.036], [0.6, 0.034], [0.8, 0.026], [1, 0.020]];
 function legCurve(l, n) {
   const pts = [];
   for (let i = 0; i <= n; i++) {
@@ -906,37 +890,24 @@ function drawLegs() {
   for (const l of D.legs) {
     const lift = l.lift, sc = 1 + lift * 0.14;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    // foot: webbed paw with four toes, fanned wider mid-stride, claws at the tips
-    const fa = l.fang, ca0 = Math.cos(fa), sa0 = Math.sin(fa);
-    const spread = 0.3 + lift * 0.2, tl = L * 0.037 * sc, pr = L * 0.025 * sc;
-    const toes = [];
-    for (let c = 0; c < 4; c++) {
-      const a = fa + (c - 1.5) * spread;
-      toes.push({ a, bx: l.ex + Math.cos(a) * pr * 0.9, by: l.ey + Math.sin(a) * pr * 0.9,
-        tx: l.ex + Math.cos(a) * (pr * 0.9 + tl * (c === 1 || c === 2 ? 1 : 0.85)), ty: l.ey + Math.sin(a) * (pr * 0.9 + tl * (c === 1 || c === 2 ? 1 : 0.85)) });
-    }
-    // web
-    ctx.fillStyle = T.skinDeep; ctx.strokeStyle = T.rim; ctx.lineWidth = lw;
-    ctx.beginPath(); ctx.moveTo(l.ex, l.ey);
-    for (const t of toes) ctx.lineTo(t.bx + (t.tx - t.bx) * 0.55, t.by + (t.ty - t.by) * 0.55);
-    ctx.closePath(); ctx.fill();
-    // toes
-    for (const t of toes) {
-      const px = -Math.sin(t.a), py = Math.cos(t.a);
-      ctx.fillStyle = T.skin;
+    // foot: toes fanned around the direction of the lower leg, leaning toward the body's heading
+    const Fa = Math.atan2(l.ey - l.ky, l.ex - l.kx), Lb = Math.atan2(l.ty, l.tx);
+    const k = Lb + 0.55 * angDiff(Fa, Lb), fan = l.front ? 1.5 : 1.75, nT = l.front ? 4 : 5;
+    const E = 1 + 0.22 * l.lift, tw = L * 0.016 * E;
+    ctx.fillStyle = T.skin; ctx.strokeStyle = T.rim; ctx.lineWidth = lw;
+    for (let c = 0; c < nT; c++) {
+      const o = c / (nT - 1) - 0.5, a = k + o * fan, len = L * (l.front ? 0.034 : 0.04) * (1 - 0.4 * Math.abs(o)) * E;
+      const px = -Math.sin(a), py = Math.cos(a), bx = l.ex + Math.cos(Fa) * L * 0.004, by = l.ey + Math.sin(Fa) * L * 0.004;
+      const tx = bx + Math.cos(a) * len, ty = by + Math.sin(a) * len;
       ctx.beginPath();
-      ctx.moveTo(l.ex + px * L * 0.009, l.ey + py * L * 0.009);
-      ctx.lineTo(t.tx + px * L * 0.005, t.ty + py * L * 0.005); ctx.lineTo(t.tx - px * L * 0.005, t.ty - py * L * 0.005);
-      ctx.lineTo(l.ex - px * L * 0.009, l.ey - py * L * 0.009); ctx.closePath(); ctx.fill(); ctx.stroke();
-      // claw
-      const cl = L * 0.018 * sc;
-      ctx.fillStyle = T.horn;
-      ctx.beginPath(); ctx.moveTo(t.tx + px * 2.1, t.ty + py * 2.1);
-      ctx.quadraticCurveTo(t.tx + Math.cos(t.a) * cl * 0.65 + px * 0.6, t.ty + Math.sin(t.a) * cl * 0.65 + py * 0.6 + 0.6, t.tx + Math.cos(t.a) * cl, t.ty + Math.sin(t.a) * cl + 1);
-      ctx.lineTo(t.tx - px * 2.1, t.ty - py * 2.1); ctx.closePath(); ctx.fill(); ctx.lineWidth = 0.8; ctx.stroke(); ctx.lineWidth = lw;
+      ctx.moveTo(bx + px * tw * 0.5, by + py * tw * 0.5); ctx.lineTo(tx + px * tw * 0.22, ty + py * tw * 0.22);
+      ctx.lineTo(tx - px * tw * 0.22, ty - py * tw * 0.22); ctx.lineTo(bx - px * tw * 0.5, by - py * tw * 0.5);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = T.horn; ctx.beginPath();
+      ctx.moveTo(tx + px * tw * 0.22, ty + py * tw * 0.22); ctx.lineTo(tx + Math.cos(a) * L * 0.015, ty + Math.sin(a) * L * 0.015);
+      ctx.lineTo(tx - px * tw * 0.22, ty - py * tw * 0.22); ctx.closePath(); ctx.fill(); ctx.fillStyle = T.skin;
     }
-    ctx.fillStyle = T.skin;
-    ctx.beginPath(); ctx.ellipse(l.ex, l.ey, pr * 1.05, pr * 0.85, fa, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(l.ex + Math.cos(Fa) * L * 0.003, l.ey + Math.sin(Fa) * L * 0.003, L * 0.017 * E, 0, TAU); ctx.fill(); ctx.stroke();
     // limb silhouette
     const p = new Path2D(), c = legOutline(l, p);
     const gr = ctx.createLinearGradient(l.ax, l.ay, l.ex, l.ey);
@@ -965,13 +936,6 @@ function drawLegs() {
       ctx.stroke();
     }
     ctx.restore();
-    // knee spur
-    const kd = Math.atan2(l.ky - (l.ay + l.ey) / 2, l.kx - (l.ax + l.ex) / 2);
-    ctx.fillStyle = T.horn; ctx.strokeStyle = T.rim; ctx.lineWidth = 0.9;
-    const kx = l.kx, ky = l.ky, kl = L * 0.03;
-    ctx.beginPath(); ctx.moveTo(kx - Math.sin(kd) * 2.4, ky + Math.cos(kd) * 2.4);
-    ctx.lineTo(kx + Math.cos(kd) * kl, ky + Math.sin(kd) * kl); ctx.lineTo(kx + Math.sin(kd) * 2.4, ky - Math.cos(kd) * 2.4);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
   }
 }
 
