@@ -12,6 +12,7 @@ import { Page } from './page.js';
 import { Paper } from './paper.js';
 import { Sound } from './audio.js';
 import { Butterflies } from './butterflies.js';
+import { BACKDROPS } from './backdrops.js';
 
 export const MAX_DRAGONS = 6;
 
@@ -24,6 +25,7 @@ export class World {
     this.flocking = true;
     this.stats = { butterflies: 0, words: 0 }; this.leavers = []; this.particles = new Particles(); this.page = new Page(); this.paper = new Paper(); this.sound = new Sound(); this.butterflies = new Butterflies(this); this.butterfliesOn = false;
     this.paperOn = true;
+    this.hot = []; this.sceneCache = {}; this.scene = null; this.sceneName = 'paper';
     this.listeners = new Set();
     this.pointer = { x: 0, y: 0, down: false, mouseDown: false, key: false, seen: false, inside: false, type: 'mouse', lastMove: -99, idleFor: 99, moveSince: 0 };
     this.shake = 0; this.pops = 0;
@@ -37,7 +39,24 @@ export class World {
     this.mq.addEventListener && this.mq.addEventListener('change', () => { if (this.themeMode === 'auto') this.applyTheme(); });
     this.applyTheme();
     this.bindInput();
+    let want = new URLSearchParams(location.search).get('scene'), wx = null;
+    try { want = want || localStorage.getItem('draco.scene'); wx = localStorage.getItem('draco.weather'); } catch (_) {}
+    this.initial = { scene: want, weather: wx };
   }
+
+  // ---------------------------------------------------------------- backdrop
+  /** 'paper' (the page of text), 'garden' or 'weather'. */
+  setScene(name, save = true) {
+    if (name !== 'garden' && name !== 'weather') name = 'paper';
+    this.sceneName = name; this.page.hidden = name !== 'paper';
+    this.scene = name === 'paper' ? null : (this.sceneCache[name] ||= new BACKDROPS[name](this));
+    this.particles.windX = this.particles.windY = 0; this.particles.clear();
+    if (this.scene && this.W) this.scene.resize();
+    if (save) try { localStorage.setItem('draco.scene', name); } catch (_) {}
+    this.emit('scene');
+  }
+  setWeather(m) { const wx = this.sceneCache.weather ||= new BACKDROPS.weather(this); wx.setMode(m); try { localStorage.setItem('draco.weather', m); } catch (_) {} this.emit('scene'); }
+  get weatherMode() { return this.sceneCache.weather ? this.sceneCache.weather.mode : 'rain'; }
 
   // ---------------------------------------------------------------- theme
   applyTheme() {
@@ -45,7 +64,7 @@ export class World {
     this.theme = THEMES[name];
     document.documentElement.dataset.theme = name;
     document.documentElement.style.setProperty('color-scheme', name);
-    if (this.W) this.buildPaperBitmap();
+    if (this.W) { this.buildPaperBitmap(); for (const k in this.sceneCache) this.sceneCache[k].themeChanged?.(); }
     this.emit('theme');
   }
   setThemeMode(m) {
@@ -123,6 +142,7 @@ export class World {
     this.page.fit(W, H, this.g);
     this.paper.resize(W, H);
     this.buildPaperBitmap();
+    if (this.scene) this.scene.resize();
     for (const d of this.dragons) { d.sync(true); if (!d.x && !d.y) d.place(W * 0.5, H * 0.55, 0); else { d.x = clamp(d.x, 0, W); d.y = clamp(d.y, 0, H); } }
   }
 
@@ -181,15 +201,12 @@ export class World {
       if (off || d.leave.t > 4.5) { this.leavers.splice(i, 1); this.renderers.delete(d.id); }
     }
 
-    const circs = [];
-    for (const d of this.dragons) d.collectObstacles(circs);
-    this.page.update(dt, circs, this);
-
-    const pg = this.page, pp = this.paperOn ? this.paper : null;
-    this.particles.update(dt, this.time, (q, ddt) => { pg.hit(q, this); if (pp) pp.burnAt(q.x, q.y, ddt, 7, 0.8 + 0.1 * Math.random(), q.hue); });
-    this.butterflies.update(dt, this.time);
-    this.paper.enabled = this.paperOn;
-    this.paper.update(dt, this.paperOn ? this.particles : null);
+    const sc = this.scene, pg = this.page, pp = this.paperOn && !sc ? this.paper : null;
+    if (!sc) { const circs = []; for (const d of this.dragons) d.collectObstacles(circs); pg.update(dt, circs, this); }
+    this.particles.update(dt, this.time, sc ? null : (q, ddt) => { pg.hit(q, this); if (pp) pp.burnAt(q.x, q.y, ddt, 7, 0.8 + 0.1 * Math.random(), q.hue); });
+    if (sc) { this.buildHot(); sc.update(dt); } else this.butterflies.update(dt, this.time);
+    this.paper.enabled = !!pp;
+    this.paper.update(dt, pp ? this.particles : null);
 
     let breath = 0, bx = 0; for (const d of this.dragons) if (d.breath > breath) { breath = d.breath; bx = d.headPos.x; }
     const pops = this.paper.stats.newHoles;
@@ -197,6 +214,16 @@ export class World {
     this.shake = Math.max(this.shake * Math.exp(-dt * 6), breath * 0.9 + Math.min(2, pops * 0.35));
     this.paper.stats.ignitions = 0;
     this.emit('frame');
+  }
+
+  /** The hot breath particles as {x, y, r, p} (radius, power), for a backdrop to burn, melt or boil with. */
+  buildHot() {
+    const out = this.hot; out.length = 0;
+    for (const q of this.particles.list) {
+      if (q.k !== 'fire' || q.age < 0.04) continue;
+      const f = q.age / q.life; if (f > 0.75) continue;
+      out.push({ x: q.x, y: q.y, r: q.size * (0.7 + 1.9 * Math.pow(f, 0.8)) * 0.75, p: (1 - f) * q.heat });
+    }
   }
 
   /** Safety net under the Brains' avoidance: a head that has got inside another dragon's body is eased out of it. */
@@ -219,12 +246,16 @@ export class World {
     const { g, theme: T, dpr } = this;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-    g.drawImage(this.paperC, 0, 0);
+    const sc = this.scene;
+    if (!sc) g.drawImage(this.paperC, 0, 0);
     const sx = this.shake > 0.05 ? (Math.random() - 0.5) * this.shake : 0, sy = this.shake > 0.05 ? (Math.random() - 0.5) * this.shake : 0;
     g.setTransform(dpr, 0, 0, dpr, sx * dpr, sy * dpr);
-    if (this.paperOn || this.paper.active) this.paper.drawBase(g, T, this.frame);
-    this.page.draw(g, T, this.time, this.paper);
-    this.paper.drawGlow(g, T, this.frame);
+    if (sc) sc.draw(g, T);
+    else {
+      if (this.paperOn || this.paper.active) this.paper.drawBase(g, T, this.frame);
+      this.page.draw(g, T, this.time, this.paper);
+      this.paper.drawGlow(g, T, this.frame);
+    }
     const env = { dpr, particles: this.particles, clock: this.time };
     const order = this.dragons.slice().sort((a, b) => a.id - b.id);
     for (const d of order) this.renderers.get(d.id).shadow(g, T, env);
@@ -235,7 +266,7 @@ export class World {
       g.save(); g.translate(c.x, c.y); g.scale(1 + 0.08 * e, 1 + 0.08 * e); g.translate(-c.x + 30 * e, -c.y + 44 * e); g.globalAlpha = 0.9 - 0.7 * e; r.shadow(g, T, env); g.restore();
       g.save(); g.translate(c.x, c.y); g.scale(k, k); g.translate(-c.x, -c.y); r.draw(g, T, env); g.restore();
     }
-    this.butterflies.draw(g, T);
+    if (sc) sc.drawTop(g, T); else this.butterflies.draw(g, T);
     if (this.showSelection) this.drawSelection(g, T);
     this.particles.draw(g, T, this.time);
     this.drawBloom(g, T);
@@ -298,5 +329,5 @@ export class World {
   resume() { if (!this.running) { this.running = true; this.last = 0; requestAnimationFrame(this._frame); } }
 
   /** Wipe the burn: page, paper, particles. */
-  restorePage() { this.paper.reset(); this.page.restore(); this.particles.clear(); this.emit('restore'); }
+  restorePage() { if (this.scene) this.scene.reset(); else { this.paper.reset(); this.page.restore(); } this.particles.clear(); this.emit('restore'); }
 }

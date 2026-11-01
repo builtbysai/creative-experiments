@@ -198,6 +198,7 @@ export class Page {
 
   /** A word near (x, y) between distances `a` and `b` for a dragon to read or burn. */
   randomWord(x, y, a, b, unburnt) {
+    if (this.hidden) return null;
     const ws = this.words;
     for (let i = 0; i < 50; i++) {
       const w = ws[(Math.random() * ws.length) | 0];

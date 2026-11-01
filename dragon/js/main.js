@@ -8,6 +8,8 @@ const cv = document.getElementById('c');
 const world = new World(cv);
 const herd = Store.load() || [new Genome()];
 world.resize();
+world.setScene(world.initial.scene, false);
+if (world.initial.weather) world.setWeather(world.initial.weather);
 herd.slice(0, 6).forEach((g, i) => world.addDragon(g, { name: i === 0 ? 'Draco' : `Draco ${i + 1}` }));
 const panel = new Panel(world);
 

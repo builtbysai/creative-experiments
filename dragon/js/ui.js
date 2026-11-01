@@ -25,6 +25,7 @@ const I = {
   plus: '<path d="M8 3v10M3 8h10"/>',
   close: '<path d="M4 4l8 8M12 4l-8 8"/>',
   wings: '<path d="M8 8C6 3 2 3 2.5 6.5 3 9 6 9 8 8zM8 8c2-5 6-5 5.5-1.5C13 9 10 9 8 8zM8 8c-3 1-5 4-3.5 5.3C6 14 7.5 11 8 8zM8 8c3 1 5 4 3.5 5.3C10 14 8.5 11 8 8z"/>',
+  scene: '<path d="M1.5 13.5l4.2-6.5 2.8 4 2-2.8 4 5.3z"/><circle cx="11.5" cy="4" r="1.6"/>',
   crown: '<path d="M2.5 11.5l-.5-6 3.2 2.5L8 4l2.8 4 3.2-2.5-.5 6z"/>'
 };
 const icon = n => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
@@ -56,6 +57,22 @@ const CSS = `
 .tool.accent[aria-pressed=true]{background:var(--ui);color:var(--uiBg)}
 .tool:disabled{opacity:.35;cursor:default}
 .hud [data-tip]:hover::after,.hud [data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);white-space:nowrap;background:var(--ui);color:var(--uiBg);font:500 11.5px/1 var(--sans);padding:6px 8px;border-radius:6px;pointer-events:none}
+#scenes{position:fixed;z-index:31;left:50%;bottom:78px;width:min(318px,calc(100vw - 24px));box-sizing:border-box;padding:12px;background:var(--uiBg);border:1px solid var(--uiLine);border-radius:14px;box-shadow:0 10px 36px rgba(30,15,0,.18);transform:translate(-50%,8px);opacity:0;visibility:hidden;transition:transform .22s cubic-bezier(.3,.8,.3,1),opacity .15s,visibility 0s .22s}
+#scenes.open{transform:translate(-50%,0);opacity:1;visibility:visible;transition:transform .22s cubic-bezier(.3,.8,.3,1),opacity .15s}
+#scenes h3{margin:0 0 9px 2px;font:600 11px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--uiMuted)}
+.scn{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.scn button{border:1px solid var(--uiLine);background:none;border-radius:10px;padding:5px 5px 8px;display:flex;flex-direction:column;gap:6px;align-items:stretch;color:var(--uiMuted);font-weight:500;transition:border-color .12s,color .12s,transform .12s}
+.scn button:hover{color:var(--ui);border-color:var(--ui)}
+.scn button:active{transform:scale(.97)}
+.scn button[aria-pressed=true]{border-color:var(--ui);color:var(--ui);box-shadow:inset 0 0 0 1px var(--ui)}
+.scn i{display:block;height:46px;border-radius:7px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
+.scn i.paper{background:repeating-linear-gradient(0deg,transparent 0 9px,rgba(90,70,50,.22) 9px 10px),linear-gradient(135deg,#f3ead6,#e3d5b6)}
+.scn i.garden{background:radial-gradient(circle at 28% 62%,#ff6f8f 0 3px,transparent 4px),radial-gradient(circle at 68% 40%,#ffd23f 0 3px,transparent 4px),repeating-linear-gradient(100deg,#4c8a34 0 2px,#68a64a 2px 4px),#5da042}
+.scn i.weather{background:repeating-linear-gradient(75deg,transparent 0 7px,rgba(255,255,255,.55) 7px 8px),linear-gradient(180deg,#6f8197,#9db0c2)}
+#scenes .wx{margin-top:10px;display:none}
+#scenes .wx.on{display:block}
+#scenes .wx small{display:block;margin:0 0 6px 2px;font:600 11px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--uiMuted)}
+#scenes .seg{grid-column:auto}
 @media (hover:none){.hud [data-tip]::after{display:none!important}}
 
 #editor{position:fixed;z-index:29;top:16px;right:16px;bottom:16px;width:min(320px,calc(100vw - 32px));display:flex;flex-direction:column;background:var(--uiBg);border:1px solid var(--uiLine);border-radius:var(--r);box-shadow:0 10px 40px rgba(30,15,0,.16);transform:translateX(calc(100% + 40px));opacity:0;visibility:hidden;transition:transform .3s cubic-bezier(.3,.8,.3,1),opacity .2s,visibility 0s .3s}
@@ -97,7 +114,10 @@ input[type=range]:active::-webkit-slider-thumb{transform:scale(1.2)}
 .act:disabled{opacity:.35;cursor:default}
 
 @media (max-width:640px){
-  #dock{bottom:10px;gap:2px;padding:5px}
+  #dock{bottom:10px;gap:2px;padding:5px;flex-wrap:wrap;justify-content:center;width:max-content}
+  #dock .sep{display:none}
+  .herd{flex-basis:100%;justify-content:center;margin-bottom:2px}
+  #scenes{bottom:118px}
   .chip{width:32px;height:32px}.tool{width:34px;height:34px}
   #editor{top:auto;left:8px;right:8px;bottom:70px;width:auto;height:min(54vh,460px);transform:translateY(calc(100% + 90px))}
   input[type=range]{height:30px}
@@ -124,12 +144,13 @@ export class Panel {
     this.build();
     world.on(type => {
       if (type === 'theme') this.theming();
+      if (type === 'scene' && this.scnRow) this.scenery();
       if (type === 'frame') this.count();
       if (type === 'dragons' || type === 'select' || type === 'leader') { this.dock(); this.head(); this.sync(); }
     });
     this.tally = el('div', { class: 'tally hud', 'aria-live': 'polite', html: icon('flame') + '<span>Burnt</span><b>0</b>' });
     document.body.append(this.tally); this.lastTally = 0;
-    this.theming();
+    this.theming(); this.scenery();
     this.saveSoon = (() => { let t; return () => { clearTimeout(t); t = setTimeout(() => Store.save(world), 300); }; })();
   }
 
@@ -160,6 +181,21 @@ export class Panel {
     if (v) this.sync();
   }
 
+  menu(v) { this.menuEl.classList.toggle('open', v); this.tools.scene.setAttribute('aria-pressed', String(v || this.world.sceneName !== 'paper')); }
+
+  /** Reflect the chosen background in the picker and the tools that only make sense on paper. */
+  scenery() {
+    const w = this.world, s = w.sceneName;
+    for (const b of this.scnRow.children) b.setAttribute('aria-pressed', String(b.dataset.s === s));
+    for (const b of this.wxRow.children) b.setAttribute('aria-pressed', String(b.dataset.w === w.weatherMode));
+    this.menuEl.querySelector('.wx').classList.toggle('on', s === 'weather');
+    this.tools.scene.setAttribute('aria-pressed', String(s !== 'paper' || this.menuEl.classList.contains('open')));
+    this.tools.paper.disabled = s !== 'paper'; this.tools.butterflies.disabled = s !== 'paper';
+    const tip = s === 'garden' ? 'Regrow the garden' : s === 'weather' ? 'Clear the scorch' : 'Mend the page';
+    this.tools.restore.dataset.tip = tip; this.tools.restore.setAttribute('aria-label', tip);
+    this.tally.querySelector('span').textContent = s === 'garden' ? 'Flowers burnt' : 'Burnt';
+  }
+
   // ---------------------------------------------------------------- build
   build() {
     const w = this.world;
@@ -176,6 +212,7 @@ export class Panel {
     tool('shuffle', 'dice', 'New look', () => this.shuffle());
     toggle('flock', 'flock', 'Flock together', () => w.flocking, v => { w.flocking = v; });
     toggle('butterflies', 'wings', 'Butterflies', () => w.butterfliesOn, v => { w.butterfliesOn = v; });
+    tool('scene', 'scene', 'Background', () => this.menu(!this.menuEl.classList.contains('open')));
     toggle('paper', 'flame', 'Fire burns the page', () => w.paperOn, v => { w.paperOn = v; });
     const snd = toggle('sound', 'sound', 'Sound', () => !w.sound.muted, v => { w.sound.unlock(); w.sound.setMuted(!v); snd.innerHTML = icon(v ? 'sound' : 'mute'); if (v) w.sound.blip(true); });
     snd.innerHTML = icon(w.sound.muted ? 'mute' : 'sound');
@@ -207,7 +244,15 @@ export class Panel {
       act('Remove', () => { w.removeDragon(this.d); this.saveSoon(); }, 'remove', 'danger'));
     this.editor = el('aside', { id: 'editor', class: 'hud', 'aria-label': 'Dragon editor' },
       el('header', {}, this.title, close), this.swEl, this.tabsEl, this.pane, this.foot);
-    document.body.append(this.dockEl, this.editor);
+    // background picker: a small card above the dock
+    this.scnRow = el('div', { class: 'scn', role: 'group', 'aria-label': 'Background' });
+    for (const [id, label] of [['paper', 'Paper'], ['garden', 'Garden'], ['weather', 'Weather']]) this.scnRow.append(el('button', { type: 'button', 'data-s': id, 'aria-pressed': 'false', onclick: () => w.setScene(id) }, el('i', { class: id }), label));
+    this.wxRow = el('div', { class: 'seg', role: 'group', 'aria-label': 'Weather' });
+    for (const [id, label] of [['rain', 'Rain'], ['wind', 'Wind'], ['fog', 'Fog']]) this.wxRow.append(el('button', { type: 'button', 'data-w': id, 'aria-pressed': 'false', text: label, onclick: () => w.setWeather(id) }));
+    this.menuEl = el('div', { id: 'scenes', class: 'hud', role: 'dialog', 'aria-label': 'Background' }, el('h3', { text: 'Background' }), this.scnRow, el('div', { class: 'wx' }, el('small', { text: 'Weather' }), this.wxRow));
+    document.addEventListener('pointerdown', e => { if (this.menuEl.classList.contains('open') && !this.menuEl.contains(e.target) && !this.tools.scene.contains(e.target)) this.menu(false); });
+    window.addEventListener('keydown', e => { if (e.key === 'Escape') this.menu(false); });
+    document.body.append(this.dockEl, this.editor, this.menuEl);
     this.swatches(); this.tab(this.group); this.dock(); this.head();
   }
 

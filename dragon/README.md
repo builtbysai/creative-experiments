@@ -12,6 +12,9 @@ No build step, no dependencies, no sprites: ES modules and a 2D canvas.
 ## Use it
 
 - Move the pointer: the leader walks toward it and looks. Hold: fire. Other dragons flock behind in a loose V.
+- Background picker (dock): the paper page, a **garden** (grass bends under the body and springs back, fire leaves ash,
+  flowers regrow, bees and butterflies by day, fireflies at night) or **weather** (rain that sizzles on scorched paper,
+  wind that carries smoke and bends the flame, fog that parts around the dragons). `?scene=garden|weather` picks one.
 - Leave it alone: dragons wander, glance, sniff, stretch, yawn, shake, read and burn words, chase their tails,
   greet each other, and when tired curl up and sleep (sleep spreads to neighbours).
 - **Edit** (bottom right): every gene is a slider: size, length, girth, neck, legs, toes (3 to 5), claws, wing
@@ -30,6 +33,7 @@ No build step, no dependencies, no sprites: ES modules and a 2D canvas.
 | `paper.js` | burnable paper: cell fire simulation, marching-squares holes, scorch, glow |
 | `page.js` | typesetting around obstacles, burning words |
 | `particles.js`, `audio.js` | fire/smoke/ash; synthesised crackle, roar and haptics |
+| `backdrops.js` | `Garden` and `Weather`: alternative grounds that react to the bodies and the breath |
 | `butterflies.js` | butterflies (off by default): drawn to flame, chased by dragons, burn for the tally |
 | `world.js` | owns everything, input, theme, draw order; `ui.js` the editor; `store.js` persistence |
 

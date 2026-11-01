@@ -68,6 +68,7 @@ export class Particles {
   update(dt, clock, onFire) {
     const L = this.list;
     this.fireX = 0; this.fireY = 0; this.fireW = 0;
+    const wx = this.windX || 0, wy = this.windY || 0;
     for (let i = L.length - 1; i >= 0; i--) {
       const q = L[i];
       q.age += dt;
@@ -103,6 +104,7 @@ export class Particles {
           q.x += q.vx * dt; q.y += q.vy * dt; q.rot += q.vr * dt; break;
         case 'smoke': q.vx += (noise2(q.x * 0.02 + clock * 0.3, q.y * 0.02, 13) - 0.5) * 30 * dt; q.vx *= Math.exp(-dt); q.vy *= Math.exp(-dt * 0.6); q.x += q.vx * dt; q.y += q.vy * dt; break;
       }
+      if (wx || wy) { const k = q.k === 'fire' ? 1.1 * f : q.k === 'flame' ? 0.5 : q.k === 'spark' ? 0.4 : 0.9; q.x += wx * k * dt; q.y += wy * k * dt; }
     }
     if (this.fireW > 0) { this.fireX /= this.fireW; this.fireY /= this.fireW; }
   }
