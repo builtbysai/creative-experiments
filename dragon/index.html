@@ -405,8 +405,8 @@ function initDragon(enter) {
 // foot never moves. The swing target is the neutral foothold plus a lead proportional to speed, and tracks the
 // body live, so the stride always matches the motion. Legs are slim; front elbows point back, hind knees forward.
 const LEGCFG = {
-  front: { a: 0.072, b: 0.064, lat: 0.115, fw: 0.042 },
-  hind: { a: 0.078, b: 0.068, lat: 0.113, fw: -0.004 }
+  front: { a: 0.060, b: 0.054, lat: 0.1, fw: 0.058 },
+  hind: { a: 0.068, b: 0.060, lat: 0.108, fw: -0.004 }
 };
 function updateLegs(dt) {
   const vc = 0.46 * L, kv = clamp(D.v / vc * 1.6, 0, 1);
@@ -426,7 +426,7 @@ function updateLegs(dt) {
     const x = first ? ph / PI : (ph - PI) / PI;
     if (swinging) {
       if (!l.sw) { l.sw = { x0: l.fx, y0: l.fy }; D.steps++; }
-      const lead = L * 0.065 * kv;
+      const lead = L * 0.055 * kv;
       const tgx = l.px + g.tx * lead, tgy = l.py + g.ty * lead, e = x * x * (3 - 2 * x);
       l.fx = lerp(l.sw.x0, tgx, e); l.fy = lerp(l.sw.y0, tgy, e);
       l.lift = Math.sin(PI * clamp(x, 0, 1));
@@ -759,14 +759,17 @@ function limbPath(ax, ay, bx, by, wa, wm, wb, p) {
 }
 
 // A leg as one smooth silhouette: thigh muscle, narrow knee, tapering shin, ankle.
-const LEG_PROFILE = [[0, 0.050], [0.2, 0.054], [0.46, 0.036], [0.6, 0.034], [0.8, 0.026], [1, 0.020]];
+const LEG_PROFILE = [[0, 0.046], [0.2, 0.048], [0.46, 0.032], [0.58, 0.030], [0.8, 0.023], [1, 0.018]];
 function legCurve(l, n) {
   const pts = [];
   for (let i = 0; i <= n; i++) {
     const t = i / n, u = 1 - t;
     // quadratic through the knee so the bend is rounded, not a hinge
     const cx = 2 * l.kx - 0.5 * (l.ax + l.ex), cy = 2 * l.ky - 0.5 * (l.ay + l.ey);
-    pts.push({ x: u * u * l.ax + 2 * u * t * cx + t * t * l.ex, y: u * u * l.ay + 2 * u * t * cy + t * t * l.ey, t });
+    const qx = u * u * l.ax + 2 * u * t * cx + t * t * l.ex, qy = u * u * l.ay + 2 * u * t * cy + t * t * l.ey;
+    // blend with the straight two-bone path so the elbow stays crisp instead of turning into a rubber hose
+    const pu = t < 0.5 ? t * 2 : (t - 0.5) * 2, p0x = t < 0.5 ? l.ax : l.kx, p0y = t < 0.5 ? l.ay : l.ky, p1x = t < 0.5 ? l.kx : l.ex, p1y = t < 0.5 ? l.ky : l.ey;
+    pts.push({ x: lerp(qx, lerp(p0x, p1x, pu), 0.6), y: lerp(qy, lerp(p0y, p1y, pu), 0.6), t });
   }
   for (let i = 0; i <= n; i++) {
     const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n, i + 1)], d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
