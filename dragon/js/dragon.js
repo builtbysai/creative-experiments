@@ -341,14 +341,19 @@ export class Dragon {
     const Sx = sg.x + sg.nx * side * sg.hw * so, Sy = sg.y + sg.ny * side * sg.hw * so;
     const Bx = bg.x + bg.nx * side * bg.hw * bo, By = bg.y + bg.ny * side * bg.hw * bo;
     const fx = sg.tx, fy = sg.ty, nx = sg.nx * side, ny = sg.ny * side;
-    const fl = Math.sin(this.wphase + (side > 0 ? 0.35 : 0)) * this.flap;
+    const ph = this.wphase + (side > 0 ? 0.35 : 0), fl = Math.sin(ph) * this.flap;
+    // seen from above a beating wing shortens as it rises and falls, and is longest at mid-stroke
+    const shorten = 1 - 0.2 * clamp(this.flap / 0.16, 0, 1) * Math.pow(Math.sin(ph), 2) * o;
+    // the idle wing is never quite still: a slow breathing and a tremor at the tips
+    const idle = (1 - clamp(this.flap / 0.08, 0, 1)) * 0.5;
     const dir = th => [fx * Math.cos(th) + nx * Math.sin(th), fy * Math.cos(th) + ny * Math.sin(th)];
-    const armTh = lerp(3.02, 1.15, o) + fl * 0.5, armL = L * wc.armLen * lerp(0.5, 1, o);
+    const armTh = lerp(3.02, 1.15, o) + fl * 0.5, armL = L * wc.armLen * lerp(0.5, 1, o) * (1 - 0.5 * (1 - shorten));
     const ad = dir(armTh), Wx = Sx + ad[0] * armL, Wy = Sy + ad[1] * armL;
     const tips = [], ctr = [], joints = [];
     for (let i = 0; i < wc.fingers; i++) {
       const e = sstep(0.03 * i, 0.78 + 0.03 * i, o);
-      const th = lerp(wc.fold[i], wc.open[i], e) + fl * (0.35 + 0.15 * i), len = wc.lens[i] * L * lerp(0.46, 1, e);
+      const lag = Math.sin(ph - 0.34 * (i + 1)) * this.flap * (0.35 + 0.2 * i) + idle * 0.02 * Math.sin(this.time * 1.3 + i * 1.7 + side) * (i + 1) * o;
+      const th = lerp(wc.fold[i], wc.open[i], e) + lag, len = wc.lens[i] * L * lerp(0.46, 1, e) * shorten;
       const dd = dir(th), tx = Wx + dd[0] * len, ty = Wy + dd[1] * len;
       const bow = 0.1 * len * (0.3 + 0.7 * e);
       tips.push([tx, ty]);
@@ -373,9 +378,9 @@ export class Dragon {
       this.emit += dt * 100 * this.breath * an.fire.rate;
       while (this.emit >= 1) {
         this.emit -= 1;
-        const a = hd + (Math.random() + Math.random() - 1) * 0.07, spd = rr(1.25, 1.7) * L * an.fire.reach;
+        const a = hd + (Math.random() + Math.random() - 1) * 0.045, spd = rr(1.0, 1.32) * L * an.fire.reach;
         const off = rr(-0.012, 0.012) * L;
-        p.fire(mx - Math.sin(hd) * off, my + Math.cos(hd) * off, Math.cos(a) * spd, Math.sin(a) * spd, rr(0.5, 0.72), rr(0.016, 0.026) * L, hue, u);
+        p.fire(mx - Math.sin(hd) * off, my + Math.cos(hd) * off, Math.cos(a) * spd, Math.sin(a) * spd, rr(0.42, 0.6), rr(0.012, 0.019) * L, hue, u);
       }
       this.sparkAcc += dt * 7 * this.breath * an.fire.rate;
       while (this.sparkAcc >= 1) {

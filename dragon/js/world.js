@@ -172,7 +172,7 @@ export class World {
     this.page.update(dt, circs, this);
 
     const pg = this.page, pp = this.paperOn ? this.paper : null;
-    this.particles.update(dt, this.time, (q, ddt) => { pg.hit(q, this); if (pp) pp.burnAt(q.x, q.y, ddt, 14, 0.8 + 0.1 * Math.random()); });
+    this.particles.update(dt, this.time, (q, ddt) => { pg.hit(q, this); if (pp) pp.burnAt(q.x, q.y, ddt, 10, 0.8 + 0.1 * Math.random()); });
     this.paper.enabled = this.paperOn;
     this.paper.update(dt, this.paperOn ? this.particles : null);
 

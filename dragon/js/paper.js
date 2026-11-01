@@ -140,6 +140,16 @@ export class Paper {
 
   // ---------------------------------------------------------------- queries
   /** How much of the page at (x, y) has fallen away (0..1). */
+  /** A random burnt-through spot between minD and maxD of (x, y), or null. */
+  randomHole(x, y, minD, maxD) {
+    for (let k = 0; k < 24 && this.nAct > 0; k++) {
+      const i = this.act[(Math.random() * this.nAct) | 0];
+      if (this.st[i] !== HOLE || !this.kind[i]) continue;
+      const hx = (i % this.cols + 0.5) * this.cs, hy = (((i / this.cols) | 0) + 0.5) * this.cs, d = Math.hypot(hx - x, hy - y);
+      if (d >= minD && d <= maxD) return { x: hx, y: hy };
+    }
+    return null;
+  }
   holeAt(x, y) { const i = this.cellAt(x, y); if (i < 0) return 0; const s = this.st[i]; return (s === HOLE || s === MEND) && this.kind[i] ? this.c[i] : 0; }
   stateAt(x, y) { const i = this.cellAt(x, y); return i < 0 ? INTACT : this.st[i]; }
   flameAt(x, y) { return this.stateAt(x, y) === FLAME; }

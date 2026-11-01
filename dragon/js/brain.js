@@ -203,7 +203,27 @@ class Greet extends Action {
   }
 }
 
-export const ACTIONS = { glance: Glance, sniff: Sniff, stretch: Stretch, yawn: Yawn, shake: Shake, tail: TailSwish, read: ReadWord, burn: BurnWord, sleep: Sleep, chase: TailChase, greet: Greet };
+/** Wander over to a burnt hole in the page, look into it, sniff, and look pleased (or guilty). */
+class InspectHole extends Action {
+  weight(c) { const pp = this.brain.world.paper; return pp && this.brain.world.paperOn && pp.stats.holes > 20 ? 0.8 + 2 * c.g.curiosity : 0; }
+  start() {
+    this.t = 0; this.phase = 0; this.dur = rr(2.2, 3.4);
+    const d = this.dragon; this.pt = this.brain.world.paper.randomHole(d.x, d.y, 0.4 * this.L, 2.4 * this.L); if (!this.pt) this.dur = 0;
+  }
+  tick(dt, cmd) {
+    if (!this.pt) return false;
+    const d = this.dragon, dist = Math.hypot(this.pt.x - d.x, this.pt.y - d.y); this.t += dt; cmd.look = this.pt;
+    if (this.phase === 0) {
+      cmd.mode = 'go'; cmd.tx = this.pt.x; cmd.ty = this.pt.y; cmd.stand = 0.26 * this.L; cmd.speed = 0.6; cmd.tail = 0.2;
+      if (dist < 0.38 * this.L || this.t > 7) { this.phase = 1; this.t = 0; }
+      return true;
+    }
+    cmd.mode = 'hold'; cmd.sniff = sstep(0, 0.5, this.t); cmd.headBias = 0.12 * Math.sin(this.t * 1.6); cmd.breathRate = 1.8; cmd.speed = 0; cmd.tail = 0.4;
+    return this.t < this.dur;
+  }
+}
+
+export const ACTIONS = { inspect: InspectHole, glance: Glance, sniff: Sniff, stretch: Stretch, yawn: Yawn, shake: Shake, tail: TailSwish, read: ReadWord, burn: BurnWord, sleep: Sleep, chase: TailChase, greet: Greet };
 
 // ------------------------------------------------------------------ brain
 export class Brain {
@@ -327,6 +347,8 @@ export class Brain {
         this.wpWait -= dt;
         // pausing: stand, breathe, look about
         cmd.mode = 'hold'; cmd.tail = 0.25;
+        // the leader does not set off until the flock has caught up
+        if (ctx.isLeader && w.flocking && this.stragglers() > 0.5) this.wpWait = Math.max(this.wpWait, 0.2);
         if (this.wpWait <= 0) this.wp = null;
         this.glance(dt, cmd, ctx);
         return;
@@ -334,11 +356,20 @@ export class Brain {
       this.wp = this.pickWaypoint(m);
     }
     cmd.mode = 'go'; cmd.tx = this.wp.x; cmd.ty = this.wp.y; cmd.stand = 0.12 * L;
-    cmd.speed = clamp(0.55 + 0.35 * (1 - g.laziness) + 0.1 * ctx.energy, 0.4, 1);
+    // an unhurried, slightly varying stroll, slower if the flock has fallen behind
+    const stray = ctx.isLeader && w.flocking ? this.stragglers() : 0;
+    cmd.speed = clamp((0.55 + 0.35 * (1 - g.laziness) + 0.1 * ctx.energy) * (0.9 + 0.2 * Math.sin(this.clock * 0.37 + d.id)) * (1 - 0.6 * stray), 0.15, 1);
     cmd.minSpeed = 0.08;
     this.avoidOthers(cmd, ctx);
     this.glance(dt, cmd, ctx);
     if (Math.hypot(this.wp.x - d.x, this.wp.y - d.y) < 0.2 * L) { this.wpWait = rr(0.4, 2.2) * (0.5 + g.laziness); }
+  }
+
+  /** 0..1: how far the furthest flock-mate has fallen behind the leader (only meaningful for the leader). */
+  stragglers() {
+    const d = this.dragon, w = this.world; let m = 0;
+    for (const o of w.dragons) if (o !== d && o.brain.social(o.brain.ctx || {g: o.genome.v})) m = Math.max(m, Math.hypot(o.x - d.x, o.y - d.y));
+    return sstep(1.6 * d.L, 3.2 * d.L, m);
   }
 
   /** Occasional look to the side while walking. */
@@ -382,8 +413,9 @@ export class Brain {
     const flock = w.dragons.filter(o => o !== lead).sort((a, b) => a.id - b.id), rank = flock.indexOf(d);
     const row = Math.floor(rank / 2) + 1, side = rank % 2 ? 1 : -1;
     const lh = lead.h, fx = Math.cos(lh), fy = Math.sin(lh);
-    const LL = Math.max(L, lead.L), back = (0.1 + 0.3 * row) * LL, lat = side * (0.46 + 0.3 * (row - 1)) * LL;
-    const slot = { x: lead.x - fx * back + (-fy) * lat, y: lead.y - fy * back + fx * lat };
+    const LL = Math.max(L, lead.L), back = (0.18 + 0.34 * row) * LL, lat = side * (0.6 + 0.34 * (row - 1)) * LL;
+    const wob = 0.1 * LL, tt = this.clock * 0.5 + d.id * 5.1, lead1 = lead.v * 0.3;
+    const slot = { x: lead.x + fx * lead1 - fx * (back + wob * Math.sin(tt)) + (-fy) * (lat + wob * Math.sin(tt * 0.77 + 2)), y: lead.y + fy * lead1 - fy * (back + wob * Math.sin(tt)) + fx * (lat + wob * Math.sin(tt * 0.77 + 2)) };
     let vx = 0, vy = 0;
     const dxs = slot.x - d.x, dys = slot.y - d.y, ds = Math.hypot(dxs, dys) || 1;
     const k = 0.5 + 0.8 * g.sociability;

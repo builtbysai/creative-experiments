@@ -80,7 +80,7 @@ export class Particles {
       switch (q.k) {
         case 'fire': {
           // turbulence rises with age: the jet's core holds together, the tail billows and curls
-          const turb = u * 95 * Math.pow(f, 1.3), sc = 1 / (u * 5);
+          const turb = u * 60 * Math.pow(f, 1.3), sc = 1 / (u * 5);
           q.vx += (noise2(q.x * sc + clock * 0.7, q.y * sc, 3) - 0.5) * 2 * turb * dt;
           q.vy += (noise2(q.x * sc, q.y * sc + clock * 0.7, 9) - 0.5) * 2 * turb * dt - dt * u * 2.5;
           const dr = Math.exp(-dt * 1.7); q.vx *= dr; q.vy *= dr;
@@ -123,7 +123,7 @@ export class Particles {
       if (q.k !== 'fire' && q.k !== 'flame') continue;
       const f = q.age / q.life, T = clamp(1 - f * 1.05, 0, 1) * q.heat, sp = flameSprites(q.hue ?? 28);
       const idx = clamp(Math.round((1 - T) * (RAMP - 1)), 0, RAMP - 1);
-      const grow = q.k === 'fire' ? 0.7 + 2.9 * Math.pow(f, 0.8) : 0.8 + 1.1 * f;
+      const grow = q.k === 'fire' ? 0.7 + 1.9 * Math.pow(f, 0.8) : 0.8 + 1.1 * f;
       const s = q.size * grow;
       g.globalAlpha = (q.k === 'fire' ? (dark ? 0.55 : 0.78) : 0.7) * Math.min(1, f * 14) * Math.pow(1 - f, 0.7);
       g.drawImage(sp.ramp[idx], q.x - s, q.y - s, s * 2, s * 2);
