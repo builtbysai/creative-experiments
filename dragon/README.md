@@ -30,7 +30,7 @@ No build step, no dependencies, no sprites: ES modules and a 2D canvas.
 | `paper.js` | burnable paper: cell fire simulation, marching-squares holes, scorch, glow |
 | `page.js` | typesetting around obstacles, burning words |
 | `particles.js`, `audio.js` | fire/smoke/ash; synthesised crackle, roar and haptics |
-| `moths.js` | moths: drawn to flame, chased by dragons, burn for the tally |
+| `butterflies.js` | butterflies (off by default): drawn to flame, chased by dragons, burn for the tally |
 | `world.js` | owns everything, input, theme, draw order; `ui.js` the editor; `store.js` persistence |
 
 Extending: a new gene is one line in `SCHEMA` (add its use in `anatomy.js`/the renderer). A new behaviour is a

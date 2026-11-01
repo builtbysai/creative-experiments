@@ -223,15 +223,15 @@ class InspectHole extends Action {
   }
 }
 
-/** Stalk a moth: creep up, pounce with a snap, and sometimes finish it with a puff of fire. */
+/** Stalk a butterfly: creep up, pounce with a snap, and sometimes finish it with a puff of fire. */
 class Hunt extends Action {
-  weight(c) { const m = this.brain.world.moths; return m && m.list.length ? 0.9 + 2.2 * c.g.curiosity : 0; }
+  weight(c) { const m = this.brain.world.butterflies; return m && m.list.length ? 0.9 + 2.2 * c.g.curiosity : 0; }
   start() {
     this.t = 0; this.phase = 0; this.puff = false; this.fire = this.brain.ctx.g.pyro > 0.45 && rnd() < 0.55;
-    const d = this.dragon, n = this.brain.world.moths.nearest(d.x, d.y); this.moth = n && n.d < 2.6 * this.L ? n.moth : null;
+    const d = this.dragon, n = this.brain.world.butterflies.nearest(d.x, d.y); this.prey = n && n.d < 2.6 * this.L ? n.bf : null;
   }
   tick(dt, cmd) {
-    const m = this.moth; if (!m || m.burn >= 0 || !this.brain.world.moths.list.includes(m)) return false;
+    const m = this.prey; if (!m || m.burn >= 0 || !this.brain.world.butterflies.list.includes(m)) return false;
     const d = this.dragon, dx = m.x - d.x, dy = m.y - d.y, dist = Math.hypot(dx, dy); this.t += dt; cmd.look = m; cmd.tail = 0.5;
     if (this.phase === 0) {
       cmd.mode = 'go'; cmd.tx = m.x; cmd.ty = m.y; cmd.stand = 0.2 * this.L; cmd.speed = dist > 0.8 * this.L ? 0.9 : 0.45; cmd.sniff = 0.3;

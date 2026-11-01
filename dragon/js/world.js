@@ -11,7 +11,7 @@ import { Particles, flameSprites } from './particles.js';
 import { Page } from './page.js';
 import { Paper } from './paper.js';
 import { Sound } from './audio.js';
-import { Moths } from './moths.js';
+import { Butterflies } from './butterflies.js';
 
 export const MAX_DRAGONS = 6;
 
@@ -22,7 +22,7 @@ export class World {
     this.time = 0; this.frame = 0; this.running = true; this.last = 0;
     this.dragons = []; this.renderers = new Map(); this.leaderId = null; this.selectedId = null;
     this.flocking = true;
-    this.stats = { moths: 0, words: 0 }; this.leavers = []; this.particles = new Particles(); this.page = new Page(); this.paper = new Paper(); this.sound = new Sound(); this.moths = new Moths(this);
+    this.stats = { butterflies: 0, words: 0 }; this.leavers = []; this.particles = new Particles(); this.page = new Page(); this.paper = new Paper(); this.sound = new Sound(); this.butterflies = new Butterflies(this); this.butterfliesOn = false;
     this.paperOn = true;
     this.listeners = new Set();
     this.pointer = { x: 0, y: 0, down: false, mouseDown: false, key: false, seen: false, inside: false, type: 'mouse', lastMove: -99, idleFor: 99, moveSince: 0 };
@@ -102,8 +102,8 @@ export class World {
   dismiss(d) {
     const a = d.h;
     d.brain = { actionName: 'leave', asleep: false, sleeping: false, update: () => {
-      const c = { mode: 'go', tx: d.x + Math.cos(a) * 4000, ty: d.y + Math.sin(a) * 4000, stand: 0, speed: Math.min(2.4, 0.6 + 1.2 * d.leave.t), look: null, breath: false,
-        wing: 1, flap: 0.22, jaw: 0, sniff: 0, eyeClose: 0, shake: 0, tail: 0.2, breathAmp: 1, breathRate: 1.6, flare: 1, yawScale: 1, headBias: 0 };
+      const c = { mode: 'go', tx: d.x + Math.cos(a) * 4000, ty: d.y + Math.sin(a) * 4000, stand: 0, speed: 0.9 + 2.3 * sstep(0, 0.8, d.leave.t), look: null, breath: false,
+        wing: 1, flap: 0.26, jaw: 0, sniff: 0, eyeClose: 0, shake: 0, tail: 0.2, breathAmp: 1, breathRate: 1.6, flare: 1, yawScale: 1, headBias: 0 };
       return c;
     } };
     d.leave = { t: 0 };
@@ -178,7 +178,7 @@ export class World {
     for (let i = this.leavers.length - 1; i >= 0; i--) {
       const d = this.leavers[i]; d.leave.t += dt; d.update(dt);
       const off = d.S.every(s => s.x < -this.W * 0.1 || s.x > this.W * 1.1 || s.y < -this.H * 0.1 || s.y > this.H * 1.1);
-      if (off || d.leave.t > 7) { this.leavers.splice(i, 1); this.renderers.delete(d.id); }
+      if (off || d.leave.t > 4.5) { this.leavers.splice(i, 1); this.renderers.delete(d.id); }
     }
 
     const circs = [];
@@ -187,7 +187,7 @@ export class World {
 
     const pg = this.page, pp = this.paperOn ? this.paper : null;
     this.particles.update(dt, this.time, (q, ddt) => { pg.hit(q, this); if (pp) pp.burnAt(q.x, q.y, ddt, 7, 0.8 + 0.1 * Math.random(), q.hue); });
-    this.moths.update(dt, this.time);
+    this.butterflies.update(dt, this.time);
     this.paper.enabled = this.paperOn;
     this.paper.update(dt, this.paperOn ? this.particles : null);
 
@@ -231,11 +231,11 @@ export class World {
     for (const d of order) this.renderers.get(d.id).draw(g, T, env);
     // dragons that are flying away: they climb, so they grow, and their shadow slips behind and fades
     for (const d of this.leavers) {
-      const e = sstep(0, 1.4, d.leave.t), c = d.S[(M / 2) | 0], k = 1 + 0.42 * e, r = this.renderers.get(d.id);
+      const e = sstep(0, 1.1, d.leave.t), c = d.S[(M / 2) | 0], k = 1 + 0.5 * e + 0.25 * sstep(1.1, 3, d.leave.t), r = this.renderers.get(d.id);
       g.save(); g.translate(c.x, c.y); g.scale(1 + 0.08 * e, 1 + 0.08 * e); g.translate(-c.x + 30 * e, -c.y + 44 * e); g.globalAlpha = 0.9 - 0.7 * e; r.shadow(g, T, env); g.restore();
       g.save(); g.translate(c.x, c.y); g.scale(k, k); g.translate(-c.x, -c.y); r.draw(g, T, env); g.restore();
     }
-    this.moths.draw(g, T);
+    this.butterflies.draw(g, T);
     if (this.showSelection) this.drawSelection(g, T);
     this.particles.draw(g, T, this.time);
     this.drawBloom(g, T);
