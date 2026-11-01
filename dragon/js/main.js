@@ -17,6 +17,12 @@ Promise.all(['400 18px Fraunces', '600 18px Fraunces', '400 12px "Plex Mono"'].m
   .then(() => { world.page.fit(world.W, world.H, world.g); world.buildPaperBitmap(); });
 world.start();
 
+// audio cleanup: suspend on tab hide / window blur / page close, resume on return
+document.addEventListener('visibilitychange', () => { if (document.hidden) world.sound.suspend(); else world.sound.resume(); });
+window.addEventListener('blur', () => world.sound.suspend());
+window.addEventListener('focus', () => world.sound.resume());
+window.addEventListener('pagehide', () => world.sound.suspend());
+
 // hooks for tests and screenshots
 window.__world = world;
 window.__panel = panel;
