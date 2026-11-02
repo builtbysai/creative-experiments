@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Procedural IK Cyber-Insect Simulation</title>
+<style>
+  :root {
+    --bg: #05060a;
+    --panel: rgba(11, 13, 21, 0.84);
+    --line: rgba(255, 255, 255, 0.09);
+    --line-strong: rgba(255, 255, 255, 0.18);
+    --txt: #e9edf6;
+    --mut: #8a93a8;
+    --dim: #5b6377;
+    --acc: #3dffc8;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--txt); font-family: var(--sans); font-size: 13px; overflow: hidden; user-select: none; -webkit-user-select: none; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+
+  button, select, input { font: inherit; color: inherit; }
+  button { cursor: pointer; background: none; border: 0; padding: 0; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  .glass { background: var(--panel); backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2); border: 1px solid var(--line); box-shadow: 0 14px 40px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06); }
+
+  .brand { position: fixed; top: calc(12px + env(safe-area-inset-top)); left: 14px; display: flex; align-items: center; gap: 8px; padding: 7px 12px 7px 10px; border-radius: 999px; z-index: 5; font-weight: 600; letter-spacing: .02em; pointer-events: none; }
+  .brand i { width: 8px; height: 8px; border-radius: 50%; background: var(--acc); box-shadow: 0 0 10px var(--acc); }
+  .brand small { font: 500 11px var(--mono); color: var(--mut); }
+
+  .dock { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 6; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 8px; border-radius: 18px; max-width: calc(100vw - 16px); transition: transform .25s, opacity .25s; }
+  .dock .grp { display: flex; align-items: center; gap: 4px; }
+  .dock .sep { width: 1px; align-self: stretch; background: var(--line); margin: 2px; }
+  .seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 12px; background: rgba(255,255,255,.05); }
+  .seg button { padding: 7px 12px; border-radius: 9px; color: var(--mut); font-weight: 500; white-space: nowrap; transition: background .15s, color .15s; }
+  .seg button:hover { color: var(--txt); }
+  .seg button.on { background: var(--acc); color: #04100c; font-weight: 600; }
+  .ibtn { width: 36px; height: 36px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; color: var(--mut); transition: background .15s, color .15s; }
+  .ibtn:hover { background: rgba(255,255,255,.08); color: var(--txt); }
+  .ibtn.on { background: color-mix(in srgb, var(--acc) 22%, transparent); color: var(--acc); }
+  .count { min-width: 26px; text-align: center; font: 600 14px var(--mono); }
+  .hint { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 4; color: var(--mut); font-size: 12px; padding: 6px 12px; border-radius: 999px; pointer-events: none; text-align: center; max-width: calc(100vw - 24px); transition: opacity .6s; }
+  .hint b { color: var(--acc); font-weight: 600; }
+
+  .panel { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: 12px; bottom: 12px; width: 340px; z-index: 8; border-radius: 18px; display: flex; flex-direction: column; overflow: hidden; transform: translateX(calc(100% + 24px)); transition: transform .28s cubic-bezier(.2,.8,.2,1); }
+  body.open .panel { transform: none; }
+  .panel header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 10px 8px 12px; border-bottom: 1px solid var(--line); }
+  .panel .body { overflow-y: auto; overscroll-behavior: contain; padding: 4px 14px 18px; flex: 1; }
+  .panel .body::-webkit-scrollbar { width: 6px; } .panel .body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 6px; }
+  .tab { display: none; } .tab.on { display: block; }
+
+  .who { display: flex; align-items: center; gap: 10px; padding: 12px 0 6px; }
+  .who .sw { width: 30px; height: 30px; border-radius: 9px; flex: none; background: linear-gradient(135deg, var(--c1), var(--c2)); box-shadow: 0 0 14px color-mix(in srgb, var(--c1) 55%, transparent); }
+  .who b { display: block; font-size: 14px; } .who span { color: var(--mut); font-size: 11.5px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid transparent; color: var(--txt); font-size: 12px; transition: border-color .15s, background .15s; }
+  .chip:hover { background: rgba(255,255,255,.09); }
+  .chip.on { border-color: var(--line-strong); background: rgba(255,255,255,.1); }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--d); box-shadow: 0 0 8px var(--d); }
+
+  details.sec { border-top: 1px solid var(--line); margin-top: 10px; }
+  details.sec > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 12px 0 8px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--mut); font-weight: 600; }
+  details.sec > summary::-webkit-details-marker { display: none; }
+  details.sec > summary::after { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .15s; margin-right: 3px; }
+  details.sec[open] > summary::after { transform: rotate(-135deg); }
+  h4.cap { margin: 16px 0 4px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--mut); font-weight: 600; }
+
+  .sl { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0 8px; padding: 5px 0 2px; }
+  .sl output { font: 500 11.5px var(--mono); color: var(--acc); cursor: pointer; }
+  .sl input { grid-column: 1 / -1; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 26px; background: transparent; margin: 0; --p: 50%; touch-action: pan-y; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(to right, var(--acc) var(--p), rgba(255,255,255,.12) var(--p)); }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 4px; background: rgba(255,255,255,.12); }
+  input[type=range]::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--acc); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; margin-top: -6px; box-shadow: 0 1px 6px rgba(0,0,0,.6), 0 0 0 3px color-mix(in srgb, var(--acc) 35%, transparent); }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.6), 0 0 0 3px color-mix(in srgb, var(--acc) 35%, transparent); }
+
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; width: 100%; text-align: left; }
+  .row small { display: block; color: var(--dim); font-size: 11px; margin-top: 1px; }
+  .sw2 { position: relative; width: 38px; height: 22px; border-radius: 12px; background: rgba(255,255,255,.14); flex: none; transition: background .15s; }
+  .sw2::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .sw2.on { background: var(--acc); } .sw2.on::after { transform: translateX(16px); }
+
+  .colors { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 8px 0 2px; }
+  .colors label { display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--mut); font-size: 11px; }
+  input[type=color] { -webkit-appearance: none; appearance: none; width: 100%; height: 34px; padding: 0; border: 1px solid var(--line-strong); border-radius: 10px; background: none; cursor: pointer; }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 3px; } input[type=color]::-webkit-color-swatch { border: 0; border-radius: 7px; }
+  input[type=color]::-moz-color-swatch { border: 0; border-radius: 7px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 0 2px; }
+  .pair label { display: flex; flex-direction: column; gap: 4px; color: var(--mut); font-size: 11px; }
+  select { appearance: none; -webkit-appearance: none; background: rgba(255,255,255,.06) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%238a93a8' stroke-width='1.6'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 10px center; border: 1px solid var(--line); border-radius: 10px; padding: 8px 26px 8px 10px; color: var(--txt); }
+  select option { background: #10131c; }
+
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0 4px; }
+  .btn { padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,.07); display: inline-flex; align-items: center; gap: 6px; font-weight: 500; transition: background .15s; }
+  .btn:hover { background: rgba(255,255,255,.13); }
+  .btn.pri { background: var(--acc); color: #04100c; font-weight: 600; } .btn.pri:hover { filter: brightness(1.08); }
+  .btn.danger { color: #ff7d95; }
+  textarea { width: 100%; height: 96px; resize: vertical; background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 10px; color: var(--txt); font: 11px var(--mono); padding: 8px; user-select: text; -webkit-user-select: text; }
+  .note { color: var(--dim); font-size: 11.5px; line-height: 1.6; padding: 8px 0; margin: 0; }
+  .note kbd { font: 11px var(--mono); background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 5px; color: var(--txt); margin-right: 2px; }
+
+  .roster { display: flex; flex-direction: column; gap: 4px; padding: 6px 0 2px; }
+  .ro { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 10px; background: rgba(255,255,255,.04); cursor: pointer; border: 1px solid transparent; }
+  .ro:hover { background: rgba(255,255,255,.08); } .ro.on { border-color: var(--line-strong); background: rgba(255,255,255,.1); }
+  .ro i { width: 14px; height: 14px; border-radius: 5px; flex: none; } .ro span { flex: 1; } .ro small { color: var(--dim); font: 11px var(--mono); }
+  .x { color: var(--dim); font-size: 16px; line-height: 1; padding: 0 4px; border-radius: 6px; } .x:hover { color: #ff7d95; }
+  .chip button { color: inherit; }
+  .toast { position: fixed; left: 50%; top: calc(18px + env(safe-area-inset-top)); transform: translate(-50%, -20px); opacity: 0; z-index: 20; padding: 8px 14px; border-radius: 999px; pointer-events: none; transition: .25s; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (max-width: 720px) {
+    .brand small { display: none; }
+    .dock { left: 8px; right: 8px; transform: none; max-width: none; gap: 6px; padding: 7px; justify-content: space-between; }
+    .dock .seg { flex: 1 1 100%; } .dock .seg button { flex: 1; padding: 9px 10px; }
+    .dock .sep { display: none; }
+    .hint { bottom: calc(118px + env(safe-area-inset-bottom)); }
+    .panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 58vh; border-radius: 20px 20px 0 0; transform: translateY(105%); padding-bottom: env(safe-area-inset-bottom); }
+    body.open .panel { transform: none; }
+    body.open .dock, body.open .hint { transform: translateY(160%); opacity: 0; pointer-events: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div class="brand glass"><i></i>IK Arthropods <small id="brandCount"></small></div>
+<div class="hint glass" id="hint"></div>
+<nav class="dock glass" id="dock" aria-label="Controls"></nav>
+<aside class="panel glass" id="panel" aria-label="Customize"></aside>
+<div class="toast glass" id="toast"></div>
+
+<script>
+'use strict';
+/* ==========================================================================================
+   PROCEDURAL IK CYBER-INSECTS
+     Genome      every tunable trait of a species: validated, mutable, serialisable
+     Leg         FABRIK chain with a stepping state machine
+     Antenna     spring-damper feeler
+     Creature    spine + legs + antennae; owns a Genome and steers itself each tick
+     Guidance    strategy objects that choose a target (Cursor / Path / Roam)
+     Flock       separation / alignment / cohesion between creatures
+     Renderer    draws creatures
+     Sfx         tiny footstep synth
+     World       owns creatures, effects, simulation loop
+     Input       pointer + keyboard
+     UI          dock + inspector, generated from the Genome specs
+   ========================================================================================== */
+
+// ---------------------------------------------------------------------------- utilities
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a, b) => Math.random() * (b - a) + a;
+const wrapAngle = a => { while (a < -Math.PI) a += TAU; while (a > Math.PI) a -= TAU; return a; };
+const mulberry32 = s => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const bezier = (p0, p1, p2, p3, t) => { const u = 1 - t; return u*u*u*p0 + 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t*p3; };
+function shiftHue(hex, deg) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let hh = 0, s = 0;
+  if (d) { s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn); hh = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; hh *= 60; }
+  hh = (hh + deg + 720) % 360;
+  const f = n => { const k = (n + hh / 30) % 12, a = s * Math.min(l, 1 - l); return Math.round((l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255).toString(16).padStart(2, '0'); };
+  return '#' + f(0) + f(8) + f(4);
+}
+function h(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v; else if (k === 'html') e.innerHTML = v;
+    else if (k === 'style') e.style.cssText = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) e.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return e;
+}
+const ICONS = {
+  sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>',
+  flock: '<path d="M3 9l4 2 4-2M13 6l4 2 4-2M8 17l4 2 4-2"/>',
+  sound: '<path d="M4 9v6h4l5 4V5L8 9H4zM16.5 9.2a4 4 0 010 5.6"/>',
+  mute: '<path d="M4 9v6h4l5 4V5L8 9H4zM17 9.5l4 5M21 9.5l-4 5"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  dice: '<rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/>',
+  trash: '<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>',
+  copy: '<rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a1 1 0 011-1h9"/>',
+  reset: '<path d="M4 12a8 8 0 108-8H7M7 1L4 4l3 3"/>',
+  pause: '<path d="M8 5v14M16 5v14"/>', play: '<path d="M7 5l12 7-12 7z"/>', image: '<rect x="4" y="5" width="16" height="14" rx="3"/><circle cx="9" cy="10" r="1.5"/><path d="M5 17l5-4 3 3 3-2 3 3"/>',
+  path: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h5a3 3 0 000-6h-2a3 3 0 010-6h5"/>'
+};
+const svg = n => `<svg class="i" viewBox="0 0 24 24">${ICONS[n]}</svg>`;
+const icon = n => h('span', { html: svg(n), style: 'display:inline-flex' });
+
+// ---------------------------------------------------------------------------- genome
+const RETICLES = ['double-box', 'tilted-box', 'circle', 'micro-brackets', 'corners'];
+const HULLS = ['nested-sleeves', 'stepped-boxes', 'web-truss', 'double-rail', 'wire-skeleton', 'none'];
+
+// live: true = takes effect without rebuilding the body. group + label drive the generated UI.
+const SPECS = [
+  { key: 'size',       label: 'Overall size',   group: 'Body', min: 0.5, max: 1.8, step: 0.05, def: 1 },
+  { key: 'segments',   label: 'Segments',       group: 'Body', min: 1, max: 16, step: 1, def: 3, int: true },
+  { key: 'segLength',  label: 'Segment length', group: 'Body', min: 14, max: 60, step: 1, def: 38 },
+  { key: 'width',      label: 'Body width',     group: 'Body', min: 10, max: 64, step: 1, def: 40 },
+  { key: 'taper',      label: 'Taper',          group: 'Body', min: 0, max: 1, step: 0.05, def: 1 },
+  { key: 'feeler',     label: 'Antenna length', group: 'Body', min: 0, max: 90, step: 1, def: 28 },
+  { key: 'pairs',      label: 'Leg pairs per segment', group: 'Legs', min: 1, max: 3, step: 1, def: 2, int: true },
+  { key: 'joints',     label: 'Leg joints',     group: 'Legs', min: 2, max: 5, step: 1, def: 4, int: true },
+  { key: 'legLength',  label: 'Leg length',     group: 'Legs', min: 14, max: 64, step: 1, def: 31 },
+  { key: 'spread',     label: 'Leg spread',     group: 'Legs', min: 30, max: 120, step: 1, def: 72 },
+  { key: 'fan',        label: 'Forward fan',    group: 'Legs', min: 0, max: 70, step: 1, def: 36 },
+  { key: 'stepRadius', label: 'Step distance',  group: 'Gait', min: 14, max: 64, step: 1, def: 32 },
+  { key: 'stepSpeed',  label: 'Step speed',     group: 'Gait', min: 0.04, max: 0.22, step: 0.005, def: 0.095, fmt: v => v.toFixed(3) },
+  { key: 'speed',      label: 'Top speed',      group: 'Gait', min: 1, max: 7, step: 0.1, def: 3.3, live: true },
+  { key: 'turn',       label: 'Turn rate',      group: 'Gait', min: 0.02, max: 0.2, step: 0.005, def: 0.09, live: true, fmt: v => v.toFixed(3) },
+  { key: 'wiggle',     label: 'Body wave',      group: 'Gait', min: 0, max: 0.12, step: 0.005, def: 0.02, live: true, fmt: v => v.toFixed(3) },
+];
+const SPEC = Object.fromEntries(SPECS.map(s => [s.key, s]));
+const COLORS = ['primary', 'secondary', 'accent', 'joint'];
+
+const PRESETS = {
+  'Void-Arachnid':     { size: 1, segments: 3,  segLength: 39, width: 40, taper: 1,   feeler: 28, pairs: 2, joints: 4, legLength: 31, spread: 72, fan: 36, stepRadius: 32, stepSpeed: 0.095, speed: 3.3, turn: 0.09,   wiggle: 0.02,  primary: '#c982ff', secondary: '#6c35bd', accent: '#ff9eff', joint: '#ffffff', reticle: 'double-box',     hull: 'nested-sleeves' },
+  'Scolopendra':       { size: 1, segments: 11, segLength: 24, width: 21, taper: 1,   feeler: 42, pairs: 1, joints: 3, legLength: 33, spread: 59, fan: 36, stepRadius: 30, stepSpeed: 0.125, speed: 3.8, turn: 0.0725, wiggle: 0.045, primary: '#ff4d22', secondary: '#2955ff', accent: '#ff7a33', joint: '#ffbb33', reticle: 'tilted-box',     hull: 'web-truss' },
+  'Neon-Mantis':       { size: 1, segments: 5,  segLength: 24, width: 18, taper: 1,   feeler: 38, pairs: 1, joints: 3, legLength: 40, spread: 69, fan: 36, stepRadius: 34, stepSpeed: 0.11,  speed: 3.3, turn: 0.0875, wiggle: 0.02,  primary: '#55ff66', secondary: '#1e7a44', accent: '#eeff44', joint: '#eeff88', reticle: 'corners',        hull: 'stepped-boxes' },
+  'Synth-Scarab':      { size: 1, segments: 2,  segLength: 45, width: 48, taper: 1,   feeler: 24, pairs: 2, joints: 3, legLength: 38, spread: 78, fan: 36, stepRadius: 34, stepSpeed: 0.095, speed: 3.3, turn: 0.095,  wiggle: 0.02,  primary: '#ff2a85', secondary: '#00c2a8', accent: '#00ffcc', joint: '#ff3366', reticle: 'circle',         hull: 'double-rail' },
+  'Crimson-Centipede': { size: 1, segments: 13, segLength: 22, width: 19, taper: 1,   feeler: 48, pairs: 1, joints: 4, legLength: 26, spread: 53, fan: 36, stepRadius: 28, stepSpeed: 0.135, speed: 3.8, turn: 0.0675, wiggle: 0.045, primary: '#ff294d', secondary: '#aa5533', accent: '#ffaa44', joint: '#ffffff', reticle: 'micro-brackets', hull: 'wire-skeleton' },
+  'Aqua-Strider':      { size: 1, segments: 2,  segLength: 30, width: 22, taper: 0.4, feeler: 30, pairs: 2, joints: 3, legLength: 52, spread: 96, fan: 40, stepRadius: 46, stepSpeed: 0.085, speed: 3.0, turn: 0.08,   wiggle: 0.02,  primary: '#38d6ff', secondary: '#2b5cff', accent: '#bff3ff', joint: '#ffffff', reticle: 'circle',         hull: 'double-rail' },
+};
+const PRESET_NAMES = Object.keys(PRESETS);
+
+class Genome {
+  constructor(values, name) { Object.assign(this, values); this.name = name || 'Custom'; this.base = name || null; }
+  static preset(name) { const g = new Genome(PRESETS[name], name); if (innerWidth < 600) g.size = .7; return g; }
+  clone() { const g = new Genome({}, this.name); Object.assign(g, JSON.parse(JSON.stringify(this))); return g; }
+  /** Set one trait, clamped and snapped to its spec. */
+  set(key, v) {
+    const s = SPEC[key];
+    if (s) { v = clamp(+v, s.min, s.max); if (s.int) v = Math.round(v); }
+    this[key] = v;
+    if (!this.name.endsWith('· edited') && this.name !== 'Mutant' && this.name !== 'Custom') this.name += ' · edited';
+  }
+  /** Re-roll every numeric trait and the palette. */
+  randomize() {
+    for (const s of SPECS) {
+      if (s.key === 'size') continue;
+      const r = s.max - s.min; let v = rand(s.min + r * .1, s.max - r * .1);
+      this[s.key] = +(Math.round(v / s.step) * s.step).toFixed(3);
+    }
+    const hue = rand(0, 360);
+    this.primary = shiftHue('#ff3d6e', hue); this.secondary = shiftHue('#3d5bff', hue + rand(-50, 50)); this.accent = shiftHue('#ffd23d', hue + rand(-30, 30)); this.joint = '#ffffff';
+    this.reticle = RETICLES[(Math.random() * RETICLES.length) | 0]; this.hull = HULLS[(Math.random() * 5) | 0];
+    this.name = 'Mutant'; this.base = null;
+  }
+  /** A slightly different relative, used when adding herd members. */
+  variant(amount) {
+    const g = this.clone();
+    for (const s of SPECS) if (!s.int) { const v = clamp(g[s.key] * (1 + rand(-amount, amount)), s.min, s.max); g[s.key] = +(Math.round(v / s.step) * s.step).toFixed(3); }
+    const d = rand(-amount, amount) * 70;
+    for (const c of ['primary', 'secondary', 'accent']) g[c] = shiftHue(g[c], d);
+    return g;
+  }
+  toJSON() { const o = {}; for (const k of [...SPECS.map(s => s.key), ...COLORS, 'reticle', 'hull', 'name', 'base']) o[k] = this[k]; return o; }
+  static fromJSON(o) {
+    const g = Genome.preset('Void-Arachnid');
+    for (const s of SPECS) if (typeof o[s.key] === 'number') g[s.key] = s.int ? Math.round(clamp(o[s.key], s.min, s.max)) : clamp(o[s.key], s.min, s.max);
+    for (const c of COLORS) if (/^#[0-9a-f]{6}$/i.test(o[c])) g[c] = o[c].toLowerCase();
+    if (RETICLES.includes(o.reticle)) g.reticle = o.reticle;
+    if (HULLS.includes(o.hull)) g.hull = o.hull;
+    g.name = typeof o.name === 'string' ? o.name.slice(0, 40) : 'Custom'; g.base = PRESETS[o.base] ? o.base : null;
+    return g;
+  }
+}
+
+// ---------------------------------------------------------------------------- antenna
+class Antenna {
+  constructor(side, nodes, segLen) { this.side = side; this.segLen = segLen; this.nodes = Array.from({ length: nodes }, () => ({ x: 0, y: 0, vx: 0, vy: 0 })); }
+  init(x, y, angle) { this.nodes.forEach((n, i) => { n.x = x + Math.cos(angle + this.side * .4) * i * this.segLen; n.y = y + Math.sin(angle + this.side * .4) * i * this.segLen; n.vx = n.vy = 0; }); }
+  update(head, tx, ty, t) {
+    const cos = Math.cos(head.angle), sin = Math.sin(head.angle), N = this.nodes;
+    N[0].x = head.x + cos * head.length * .48 - sin * this.side * head.width * .32;
+    N[0].y = head.y + sin * head.length * .48 + cos * this.side * head.width * .32;
+    const toT = clamp(wrapAngle(Math.atan2(ty - N[0].y, tx - N[0].x) - head.angle), -.7, .7);
+    const sweep = Math.sin(t * .007 + (this.side === 1 ? 0 : 2.2)) * .22;
+    for (let i = 1; i < N.length; i++) {
+      const p = N[i - 1], c = N[i], a = head.angle + toT * .45 + this.side * (.28 + i * .12) + sweep;
+      c.vx = (c.vx + (p.x + Math.cos(a) * this.segLen - c.x) * .28) * .72;
+      c.vy = (c.vy + (p.y + Math.sin(a) * this.segLen - c.y) * .28) * .72;
+      c.x += c.vx; c.y += c.vy;
+      const dx = c.x - p.x, dy = c.y - p.y, d = Math.hypot(dx, dy) || .001;
+      c.x = p.x + dx / d * this.segLen; c.y = p.y + dy / d * this.segLen;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------- leg
+class Leg {
+  constructor(segIndex, side, pairIndex, cfg) {
+    Object.assign(this, { segIndex, side, pairIndex });
+    this.numJoints = cfg.joints;
+    this.lengths = Array.from({ length: cfg.joints }, (_, i) => cfg.legLength * (1 - i * .11));
+    this.totalReach = this.lengths.reduce((a, b) => a + b, 0);
+    this.restX = cfg.restX; this.restY = side * cfg.restY;
+    this.stepThreshold = cfg.stepRadius; this.stepSpeed = cfg.stepSpeed; this.arch = cfg.arch;
+    this.footX = this.footY = this.targetX = this.targetY = this.idealX = this.idealY = 0;
+    this.startX = this.startY = this.c1x = this.c1y = this.c2x = this.c2y = 0;
+    this.stepProgress = 1; this.lastStepTime = 0;
+    this.joints = Array.from({ length: cfg.joints + 1 }, () => ({ x: 0, y: 0 }));
+  }
+  root(seg, sway) {
+    const cos = Math.cos(seg.angle), sin = Math.sin(seg.angle), k = seg.width * .48 * this.side;
+    return { x: seg.x + (sway ? seg.swayX : 0) - sin * k, y: seg.y + (sway ? seg.swayY : 0) + cos * k, cos, sin };
+  }
+  init(seg) {
+    this.computeIdeal(seg, 0, 0, 0, 0);
+    this.footX = this.targetX = this.idealX; this.footY = this.targetY = this.idealY;
+    const r = this.root(seg, false); this.solve(r.x, r.y, r.cos, r.sin);
+  }
+  computeIdeal(seg, vx, vy, angVel, breath) {
+    const a = seg.angle + clamp(angVel * 11, -.55, .55), cos = Math.cos(a), sin = Math.sin(a);
+    const rx = this.restX, ry = this.restY + this.side * Math.sin(breath + this.pairIndex * .6) * 2.2;
+    this.idealX = seg.x + cos * rx - sin * ry + vx * 7.5;
+    this.idealY = seg.y + sin * rx + cos * ry + vy * 7.5;
+  }
+  trigger(seg, vx, vy, settling) {
+    this.stepProgress = 0; this.startX = this.footX; this.startY = this.footY;
+    const ov = settling ? .04 : .36;
+    this.targetX = this.idealX + (this.idealX - this.footX) * ov + vx * 3.5;
+    this.targetY = this.idealY + (this.idealY - this.footY) * ov + vy * 3.5;
+    const cos = Math.cos(seg.angle), sin = Math.sin(seg.angle), ox = -sin * this.side, oy = cos * this.side;
+    const lift = clamp(Math.hypot(this.targetX - this.startX, this.targetY - this.startY) * .38, 8, 28);
+    this.c1x = lerp(this.startX, this.targetX, .25) + ox * lift + cos * 6; this.c1y = lerp(this.startY, this.targetY, .25) + oy * lift + sin * 6;
+    this.c2x = lerp(this.startX, this.targetX, .78) + ox * lift * .65;     this.c2y = lerp(this.startY, this.targetY, .78) + oy * lift * .65;
+    seg.recoilX -= ox * 1.1; seg.recoilY -= oy * 1.1;
+  }
+  /** returns true on the tick the foot lands */
+  update(seg, vx, vy, angVel, canStep, stopping, t) {
+    const r = this.root(seg, true);
+    this.computeIdeal(seg, vx, vy, angVel, t * .003);
+    const dIdeal = Math.hypot(this.footX - this.idealX, this.footY - this.idealY);
+    const dRoot = Math.hypot(r.x - this.footX, r.y - this.footY);
+    const localY = -(this.footX - (seg.x + seg.swayX)) * r.sin + (this.footY - (seg.y + seg.swayY)) * r.cos;
+    const panic = dIdeal > this.stepThreshold * 1.65 || dRoot > this.totalReach * .94 || localY * this.side < 6;
+    const thr = stopping ? this.stepThreshold * .28 : this.stepThreshold;
+    let landed = false;
+    if (this.stepProgress >= 1 && (t - this.lastStepTime) > (stopping ? 260 : 70) && ((dIdeal > thr && canStep) || panic)) {
+      this.trigger(seg, vx, vy, stopping && !panic); this.lastStepTime = t;
+    }
+    if (this.stepProgress < 1) {
+      this.stepProgress = Math.min(1, this.stepProgress + this.stepSpeed * clamp(dIdeal / this.stepThreshold, .9, 1.85));
+      const p = this.stepProgress, e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      this.footX = bezier(this.startX, this.c1x, this.c2x, this.targetX, e);
+      this.footY = bezier(this.startY, this.c1y, this.c2y, this.targetY, e);
+      if (p >= 1) {
+        this.footX = this.targetX; this.footY = this.targetY;
+        seg.recoilX += (seg.x + seg.swayX - this.footX) * .025; seg.recoilY += (seg.y + seg.swayY - this.footY) * .025;
+        landed = true;
+      }
+    }
+    this.solve(r.x, r.y, r.cos, r.sin);
+    return landed;
+  }
+  solve(rx, ry, cos, sin) {
+    const J = this.joints, n = this.numJoints, ox = -sin * this.side, oy = cos * this.side, bias = this.restX * .25;
+    J[0].x = rx; J[0].y = ry;
+    for (let i = 1; i < n; i++) {
+      const q = i / n, arch = Math.sin(q * Math.PI) * (this.arch + (1 - this.stepProgress) * 14);
+      J[i].x = lerp(rx, this.footX, q) + ox * arch + cos * bias * (1 - q);
+      J[i].y = lerp(ry, this.footY, q) + oy * arch + sin * bias * (1 - q);
+    }
+    J[n].x = this.footX; J[n].y = this.footY;
+    for (let it = 0; it < 6; it++) {
+      J[n].x = this.footX; J[n].y = this.footY;
+      for (let i = n - 1; i >= 0; i--) { const dx = J[i].x - J[i + 1].x, dy = J[i].y - J[i + 1].y, l = Math.hypot(dx, dy) || 1e-4; J[i].x = J[i + 1].x + dx / l * this.lengths[i]; J[i].y = J[i + 1].y + dy / l * this.lengths[i]; }
+      J[0].x = rx; J[0].y = ry;
+      for (let i = 0; i < n; i++) { const dx = J[i + 1].x - J[i].x, dy = J[i + 1].y - J[i].y, l = Math.hypot(dx, dy) || 1e-4; J[i + 1].x = J[i].x + dx / l * this.lengths[i]; J[i + 1].y = J[i].y + dy / l * this.lengths[i]; }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------- creature
+let CREATURE_ID = 0;
+class Creature {
+  constructor(genome, x, y, angle = rand(0, TAU)) {
+    this.id = ++CREATURE_ID; this.g = genome; this.seed = (Math.random() * 1e9) | 0;
+    this.vx = this.vy = this.speed = 0; this.isSettled = false;
+    this.grabbed = false; this.grabX = 0; this.grabY = 0;
+    this.pathIdx = 0; this.beaconDone = 0; this.roam = null; this.target = null;
+    this.arrive = 26 + (this.id % 5) * 8;
+    this.build(x, y, angle);
+  }
+  get head() { return this.segments[0]; }
+  /** personal-space radius, also used for hit tests */
+  get radius() { return this.g.size * (this.g.spread * .62 + 6); }
+  get center() { let x = 0, y = 0; for (const s of this.segments) { x += s.x; y += s.y; } return { x: x / this.segments.length, y: y / this.segments.length }; }
+
+  build(x, y, angle) {
+    const g = this.g, k = g.size, rnd = mulberry32(this.seed), n = g.segments;
+    this.segLen = g.segLength * k; this.segments = [];
+    for (let i = 0; i < n; i++) {
+      const base = n <= 3 ? (i === 0 ? .86 : 1.14) : Math.sin((i / (n - .35)) * Math.PI * .85 + .25);
+      const w = Math.max(14 * k, g.width * k * lerp(1, base, g.taper));
+      const rows = n <= 3 ? 3 : 2, cells = [];
+      for (let r = 0; r < rows; r++) for (let c = 0; c < rows; c++) if (rnd() > .14) cells.push({ r, c, rows, cols: rows, secondary: rnd() <= .42, dot: rnd() > .5, phase: rnd() * TAU });
+      this.segments.push({ x: x - Math.cos(angle) * i * this.segLen, y: y - Math.sin(angle) * i * this.segLen, angle, angularVel: 0, width: w, length: this.segLen * .92, swayX: 0, swayY: 0, recoilX: 0, recoilY: 0, cells });
+    }
+    this.legs = []; this.segLegs = Array.from({ length: n }, () => []);
+    let pair = 0;
+    for (let i = 0; i < n; i++) for (let p = 0; p < g.pairs; p++) {
+      const fwd = (p - (g.pairs - 1) / 2) * g.fan + (i === 0 ? g.fan * .67 : i === n - 1 && n > 1 ? -g.fan * .67 : 0);
+      const cfg = {
+        joints: g.joints, legLength: g.legLength * k * (.94 + rnd() * .12), restX: fwd * k * (.92 + rnd() * .16), restY: g.spread * k * (.94 + rnd() * .12),
+        stepRadius: g.stepRadius * k * (.94 + rnd() * .12), stepSpeed: g.stepSpeed * (.94 + rnd() * .12), arch: 36 * k
+      };
+      for (const side of [-1, 1]) { const leg = new Leg(i, side, pair, cfg); leg.init(this.segments[i]); this.legs.push(leg); this.segLegs[i].push(leg); }
+      pair++;
+    }
+    this.slots = new Array(pair * 2);
+    for (const l of this.legs) this.slots[l.pairIndex * 2 + (l.side > 0 ? 1 : 0)] = l;
+    const fl = g.feeler * k / 4;
+    this.antennae = fl > .5 ? [new Antenna(-1, 5, fl), new Antenna(1, 5, fl)] : [];
+    this.antennae.forEach(a => a.init(x, y, angle));
+  }
+  /** Apply a changed genome in place, without teleporting. */
+  rebuild() { const hd = this.head; this.build(hd.x, hd.y, hd.angle); }
+
+  /** Steer, move and animate for one 60 Hz tick. */
+  update(world, t) {
+    const g = this.g, head = this.head, S = this.segments;
+    let tgt;
+    if (this.grabbed) {
+      const dx = this.grabX - head.x, dy = this.grabY - head.y;
+      head.angle += wrapAngle(Math.atan2(dy, dx) - head.angle) * .25;
+      this.vx = dx * .35; this.vy = dy * .35; head.x += this.vx; head.y += this.vy; this.speed = Math.hypot(this.vx, this.vy);
+      tgt = { x: this.grabX, y: this.grabY, type: 'grab' };
+    } else {
+      tgt = world.targetFor(this);
+      const dx = tgt.x - head.x, dy = tgt.y - head.y, d = Math.hypot(dx, dy);
+      const steer = world.flock.steer(this, world);
+      const pull = tgt.type === 'idle' ? 0 : tgt.type === 'repel' ? 2 : 1;
+      const mx = (d > 0 ? dx / d : 0) * pull + steer.x, my = (d > 0 ? dy / d : 0) * pull + steer.y;
+      const stopR = tgt.type === 'cursor' || tgt.type === 'beacon' ? 26 + world.creatures.length * 5 : tgt.type === 'repel' ? 0 : 16;
+      const slowR = 135 + stopR;
+      if ((tgt.type !== 'idle' && d > stopR) || steer.crowd > .3) {
+        this.isSettled = false;
+        const want = Math.hypot(mx, my) > .01 ? Math.atan2(my, mx) : head.angle, diff = wrapAngle(want - head.angle);
+        head.angularVel = lerp(head.angularVel, clamp(diff * g.turn, -.14, .14), .45);
+        head.angle += head.angularVel;
+        const brake = 1 - clamp(Math.abs(diff) / Math.PI, 0, .55);
+        const arrive = tgt.type === 'idle' || d <= stopR ? .4 : clamp((d - stopR) / (slowR - stopR), .12, 1);
+        this.speed = lerp(this.speed, g.speed * (tgt.type === 'repel' ? 1.35 : 1) * arrive * brake, .14);
+        const sway = Math.sin(t * .011 + this.id) * g.wiggle * arrive;
+        this.vx = Math.cos(head.angle + sway) * this.speed; this.vy = Math.sin(head.angle + sway) * this.speed;
+        head.x += this.vx; head.y += this.vy;
+      } else {
+        this.speed = lerp(this.speed, 0, .18); head.angularVel *= .7;
+        if (tgt.type === 'cursor' && d > 6) { head.angularVel = wrapAngle(Math.atan2(dy, dx) - head.angle) * .03; head.angle += head.angularVel; }
+        this.vx = this.vx * .78 + Math.cos(head.angle) * Math.sin(t * .0035 + this.id) * .12;
+        this.vy = this.vy * .78 + Math.sin(head.angle) * Math.sin(t * .0035 + this.id) * .12;
+        head.x += this.vx; head.y += this.vy;
+        this.isSettled = this.speed < .08 && this.legs.every(l => l.stepProgress >= 1);
+      }
+    }
+    head.x = clamp(head.x, 8, world.width - 8); head.y = clamp(head.y, 8, world.height - 8);
+    this.target = tgt;
+
+    // spine follows the head
+    for (let i = 1; i < S.length; i++) {
+      const p = S[i - 1], c = S[i];
+      const wave = S.length > 2 ? Math.sin(t * .01 - i * .55 + this.id) * g.wiggle * .67 * clamp(this.speed / 2, 0, 1) : 0;
+      const raw = Math.atan2(p.y - c.y, p.x - c.x) + wave, prev = c.angle;
+      c.angle = p.angle + clamp(wrapAngle(raw - p.angle), -.62, .62) * .88;
+      c.angularVel = wrapAngle(c.angle - prev);
+      c.x = p.x - Math.cos(c.angle) * this.segLen; c.y = p.y - Math.sin(c.angle) * this.segLen;
+    }
+
+    // legs, with neighbour inhibition so a gait emerges
+    const stopping = this.speed < .35 && !this.grabbed;
+    let stepping = 0; for (const l of this.legs) if (l.stepProgress < 1) stepping++;
+    const busy = o => o && o.stepProgress < .6;
+    for (const leg of this.legs) {
+      const P = leg.pairIndex, s = leg.side > 0 ? 1 : 0;
+      const nb = busy(this.slots[P * 2 + 1 - s]) || busy(this.slots[(P - 1) * 2 + s]) || busy(this.slots[(P + 1) * 2 + s]);
+      const seg = S[leg.segIndex], was = leg.stepProgress < 1;
+      const landed = leg.update(seg, this.vx, this.vy, seg.angularVel, !nb && !(stopping && stepping >= 2), stopping, t);
+      const now = leg.stepProgress < 1; if (now && !was) stepping++; else if (!now && was) stepping--;
+      if (landed) world.onFootfall(this, leg);
+    }
+
+    // centre-of-mass sway
+    for (let i = 0; i < S.length; i++) {
+      const s = S[i]; let sx = 0, sy = 0, c = 0;
+      for (const l of this.segLegs[i]) { const w = l.stepProgress >= 1 ? 1 : .25; sx += (l.footX - s.x) * w; sy += (l.footY - s.y) * w; c += w; }
+      s.recoilX *= .78; s.recoilY *= .78;
+      s.swayX = lerp(s.swayX, (c ? clamp(sx / c * .14, -7, 7) : 0) + s.recoilX, .22);
+      s.swayY = lerp(s.swayY, (c ? clamp(sy / c * .14, -7, 7) : 0) + s.recoilY, .22);
+    }
+    for (const a of this.antennae) a.update(head, tgt.x, tgt.y, t);
+  }
+}
+
+// ---------------------------------------------------------------------------- guidance (strategy pattern)
+class Guidance {
+  constructor(id, label, hint, touchHint) { this.id = id; this.label = label; this.hint = hint; this.touchHint = touchHint; }
+  target() { throw new Error('abstract'); }
+  idle(c) { return { x: c.head.x, y: c.head.y, type: 'idle' }; }
+  /** wander target; also the fallback before any input */
+  static roam(c, w, t) {
+    const hd = c.head;
+    if (!c.roam || Math.hypot(hd.x - c.roam.x, hd.y - c.roam.y) < 65 || t - c.roam.t > 6500) {
+      const m = Math.min(140, w.width * .18, w.height * .18);
+      c.roam = { x: rand(m, Math.max(m + 40, w.width - m)), y: rand(m, Math.max(m + 40, w.height - m)), t };
+    }
+    return { x: c.roam.x, y: c.roam.y, type: 'roam' };
+  }
+}
+class CursorGuidance extends Guidance {
+  constructor() { super('cursor', 'Cursor', '<b>Move</b> or <b>drag</b> to lead them · <b>click</b> to call them over · <b>drag a creature</b> to carry it', '<b>Drag</b> to lead them · <b>tap</b> to call them over · drag a creature to carry it'); }
+  target(c, w) { return w.pointer.active ? { x: w.pointer.x, y: w.pointer.y, type: 'cursor' } : Guidance.roam(c, w, w.t); }
+}
+class PathGuidance extends Guidance {
+  constructor() { super('path', 'Path', '<b>Click</b> to add stops · they walk the loop together · <b>C</b> clears', '<b>Tap</b> to add stops · they walk the loop'); }
+  target(c, w) {
+    const P = w.waypoints; if (!P.length) return this.idle(c);
+    const wp = P[c.pathIdx % P.length];
+    if (Math.hypot(c.head.x - wp.x, c.head.y - wp.y) < c.arrive) c.pathIdx = (c.pathIdx + 1) % P.length;
+    const n = P[c.pathIdx % P.length];
+    return { x: n.x, y: n.y, type: 'path' };
+  }
+}
+class OrbitGuidance extends Guidance {
+  constructor() { super('orbit', 'Orbit', '<b>Move</b> to carry the ring · they circle the cursor together', '<b>Drag</b> to carry the ring · they circle your finger'); }
+  target(c, w) {
+    if (!w.pointer.active) return Guidance.roam(c, w, w.t);
+    const n = w.creatures.length, i = w.creatures.indexOf(c), a = w.t * .0006 + i / n * TAU, R = 90 + n * 16, p = w.pointer;
+    return { x: p.x + Math.cos(a) * R, y: p.y + Math.sin(a) * R, type: 'orbit' };
+  }
+}
+class RoamGuidance extends Guidance {
+  constructor() { super('roam', 'Roam', 'They wander on their own · <b>click</b> to call them over', 'They wander on their own · <b>tap</b> to call them over'); }
+  target(c, w) { return Guidance.roam(c, w, w.t); }
+}
+
+// ---------------------------------------------------------------------------- flocking
+class Flock {
+  constructor() { this.enabled = true; this.separation = 1; this.alignment = .8; this.cohesion = .3; this.radius = 260; }
+  /** Steering vector (about unit scale) plus how crowded this creature is. */
+  steer(me, world) {
+    const hd = me.head, R = this.radius * me.g.size;
+    let sx = 0, sy = 0, ax = 0, ay = 0, cx = 0, cy = 0, n = 0, crowd = 0;
+    for (const o of world.creatures) {
+      if (o === me) continue;
+      const oh = o.head, dh = Math.hypot(oh.x - hd.x, oh.y - hd.y);
+      if (dh < R) { n++; cx += oh.x; cy += oh.y; const sp = Math.hypot(o.vx, o.vy) || 1; ax += o.vx / sp; ay += o.vy / sp; }
+      const personal = (me.radius + o.radius) * 1.2;
+      if (dh < personal + o.segLen * o.segments.length) {
+        for (const s of o.segments) {            // keep clear of the whole body, not only the head
+          const dx = hd.x - s.x, dy = hd.y - s.y, d = Math.hypot(dx, dy);
+          if (d < personal && d > 0) { const f = 1 - d / personal; sx += dx / d * f; sy += dy / d * f; crowd += f; }
+        }
+      }
+    }
+    const k = (this.enabled ? this.separation : .7) * 3.6;
+    let x = sx * k, y = sy * k;
+    if (this.enabled && n) {
+      const am = Math.hypot(ax, ay); if (am > .01) { x += ax / am * this.alignment * .9; y += ay / am * this.alignment * .9; }
+      const dx = cx / n - hd.x, dy = cy / n - hd.y, d = Math.hypot(dx, dy);
+      if (d > me.radius * 1.4) { x += dx / d * this.cohesion * .7; y += dy / d * this.cohesion * .7; }
+    }
+    const m = 50, W = world.width, H = world.height;   // stay on screen
+    if (hd.x < m) x += (m - hd.x) / m * 2; else if (hd.x > W - m) x -= (hd.x - (W - m)) / m * 2;
+    if (hd.y < m) y += (m - hd.y) / m * 2; else if (hd.y > H - m) y -= (hd.y - (H - m)) / m * 2;
+    return { x, y, crowd };
+  }
+}
+
+// ---------------------------------------------------------------------------- audio
+class Sfx {
+  constructor() { this.enabled = false; this.volume = .5; this.ctx = null; this.last = 0; this.i = 0; this.scale = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33]; }
+  set(on) {
+    if (on && !this.ctx) { const A = window.AudioContext || window.webkitAudioContext; if (A) this.ctx = new A(); }
+    if (this.ctx && on && this.ctx.state === 'suspended') this.ctx.resume();
+    this.enabled = !!on && !!this.ctx; return this.enabled;
+  }
+  tone(f0, f1, dur, gain, pan = 0) {
+    const t = this.ctx.currentTime, o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = 'triangle'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(gain * this.volume, t); g.gain.exponentialRampToValueAtTime(.0005, t + dur + .005);
+    o.connect(g);
+    if (this.ctx.createStereoPanner) { const p = this.ctx.createStereoPanner(); p.pan.value = pan; g.connect(p); p.connect(this.ctx.destination); } else g.connect(this.ctx.destination);
+    o.start(t); o.stop(t + dur + .02);
+  }
+  step(c, leg, x, w) {
+    if (!this.enabled) return; const t = this.ctx.currentTime; if (t - this.last < .1) return; this.last = t;
+    const f = this.scale[(leg.pairIndex + this.i++) % this.scale.length] * (c.g.size < 1 ? 1.3 : 1);
+    this.tone(f, f * .5, .05, .03, clamp(x / w * 2 - 1, -1, 1) * .7);
+  }
+  chirp(up = true) { if (this.enabled) this.tone(up ? 300 : 600, up ? 700 : 280, .12, .04); }
+}
+
+// ---------------------------------------------------------------------------- renderer
+class Renderer {
+  constructor(ctx) { this.ctx = ctx; }
+  creature(c, view, t) {
+    const ctx = this.ctx, g = c.g;
+    if (view.reticles || view.tethers) for (const leg of c.legs) {
+      const stepping = leg.stepProgress < 1;
+      if (view.reticles) this.reticle(g, leg.idealX, leg.idealY, leg.stepThreshold, c.segments[leg.segIndex].angle, stepping, Math.hypot(leg.footX - leg.idealX, leg.footY - leg.idealY) / leg.stepThreshold);
+      if (view.tethers) {
+        ctx.save(); ctx.beginPath(); ctx.moveTo(leg.idealX, leg.idealY); ctx.lineTo(leg.footX, leg.footY);
+        ctx.strokeStyle = stepping ? g.accent : g.secondary; ctx.globalAlpha = stepping ? .55 : .35; ctx.lineWidth = 1; ctx.setLineDash([2, 3]); ctx.stroke(); ctx.restore();
+      }
+    }
+    for (const a of c.antennae) this.antenna(a, g);
+    for (const leg of c.legs) {
+      if (view.hulls) this.hull(g, leg);
+      ctx.save(); ctx.beginPath();
+      leg.joints.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+      ctx.strokeStyle = g.hull === 'web-truss' ? g.secondary : g.primary; ctx.lineWidth = 1.65; ctx.globalAlpha = .92;
+      if (g.hull === 'nested-sleeves') ctx.setLineDash([2, 3.5]);
+      ctx.stroke(); ctx.restore();
+      leg.joints.forEach((p, i) => { const foot = i === leg.numJoints; ctx.fillStyle = foot ? g.accent : g.joint; ctx.beginPath(); ctx.arc(p.x, p.y, (foot ? 3.1 : 2.1) * Math.max(.7, g.size), 0, TAU); ctx.fill(); });
+    }
+    ctx.beginPath();
+    c.segments.forEach((s, i) => i ? ctx.lineTo(s.x + s.swayX, s.y + s.swayY) : ctx.moveTo(s.x + s.swayX, s.y + s.swayY));
+    ctx.strokeStyle = g.primary; ctx.lineWidth = 2.2; ctx.stroke();
+    for (let i = c.segments.length - 1; i >= 0; i--) this.segment(g, c.segments[i], i, t);
+  }
+  antenna(a, g) {
+    const ctx = this.ctx; ctx.save(); ctx.beginPath();
+    a.nodes.forEach((n, i) => i ? ctx.lineTo(n.x, n.y) : ctx.moveTo(n.x, n.y));
+    ctx.strokeStyle = g.primary; ctx.lineWidth = 1.25; ctx.globalAlpha = .8; ctx.stroke();
+    const tip = a.nodes[a.nodes.length - 1]; ctx.fillStyle = g.accent; ctx.beginPath(); ctx.arc(tip.x, tip.y, 2, 0, TAU); ctx.fill(); ctx.restore();
+  }
+  segment(g, s, i, t) {
+    const ctx = this.ctx, hw = s.length / 2, hh = s.width / 2;
+    ctx.save(); ctx.translate(s.x + s.swayX, s.y + s.swayY); ctx.rotate(s.angle);
+    ctx.strokeStyle = g.primary; ctx.globalAlpha = .35; ctx.lineWidth = 1; ctx.strokeRect(-hw * .85, -hh - 4, s.length * .85, s.width + 8);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#06060c'; ctx.fillRect(-hw, -hh, s.length, s.width);
+    const pad = 2.5, iw = s.length - pad * 2, ih = s.width - pad * 2;
+    for (const cell of s.cells) {
+      const cw = iw / cell.cols, ch = ih / cell.rows, cx = -hw + pad + cell.c * cw, cy = -hh + pad + cell.r * ch;
+      ctx.fillStyle = cell.secondary ? g.secondary : g.primary; ctx.globalAlpha = .48 + .32 * Math.sin(t * .005 + cell.phase);
+      ctx.fillRect(cx + 1, cy + 1, Math.max(0, cw - 2), Math.max(0, ch - 2));
+      if (cell.dot) { ctx.fillStyle = '#fff'; ctx.globalAlpha = .85; ctx.beginPath(); ctx.arc(cx + cw / 2, cy + ch / 2, 1.3, 0, TAU); ctx.fill(); }
+    }
+    ctx.globalAlpha = 1; ctx.strokeStyle = g.primary; ctx.lineWidth = 1.65; ctx.strokeRect(-hw, -hh, s.length, s.width);
+    if (i === 0) {
+      const pinch = Math.sin(t * .012) * .18; ctx.strokeStyle = g.accent; ctx.lineWidth = 1.5;
+      for (const side of [-1, 1]) { ctx.save(); ctx.translate(hw, side * hh * .45); ctx.rotate(side * (-.35 + pinch)); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(8, 0); ctx.lineTo(12, -side * 4); ctx.stroke(); ctx.restore(); }
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(hw * .48, -hh * .42, 2.7, 0, TAU); ctx.arc(hw * .48, hh * .42, 2.7, 0, TAU); ctx.fill();
+      ctx.fillStyle = g.accent; ctx.globalAlpha = .9; ctx.fillRect(hw * .68, -hh * .65, 2.8, hh * 1.3);
+    }
+    ctx.restore();
+  }
+  reticle(g, x, y, radius, angle, stepping, stretch) {
+    const ctx = this.ctx, r = radius * .64;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+    ctx.strokeStyle = stepping ? g.accent : g.primary; ctx.globalAlpha = stepping ? .55 : clamp(.18 + stretch * .18, .18, .42); ctx.lineWidth = stepping ? 1.3 : 1;
+    switch (g.reticle) {
+      case 'double-box': ctx.strokeRect(-r, -r, r * 2, r * 2); ctx.strokeRect(-r * .72, -r * .72, r * 1.44, r * 1.44); break;
+      case 'tilted-box': ctx.strokeRect(-r * .75, -r * .75, r * 1.5, r * 1.5); ctx.rotate(.25); ctx.globalAlpha *= .6; ctx.strokeRect(-r * .85, -r * .85, r * 1.7, r * 1.7); break;
+      case 'circle': ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, r * .78, 0, TAU); ctx.stroke(); break;
+      default: {
+        const micro = g.reticle === 'micro-brackets', m = micro ? r * .45 : r, k = micro ? m * .55 : r * .4;
+        ctx.beginPath(); for (const sx of [-1, 1]) for (const sy of [-1, 1]) { ctx.moveTo(sx * m, sy * (m - k)); ctx.lineTo(sx * m, sy * m); ctx.lineTo(sx * (m - k), sy * m); } ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+  hull(g, leg) {
+    const ctx = this.ctx, J = leg.joints, n = leg.numJoints, sz = Math.max(.7, g.size);
+    if (g.hull === 'none') return;
+    ctx.save(); ctx.strokeStyle = g.primary;
+    if (g.hull === 'nested-sleeves') {
+      for (let i = 0; i < n; i++) {
+        const dx = J[i + 1].x - J[i].x, dy = J[i + 1].y - J[i].y, len = Math.hypot(dx, dy), th = ((n - i) * 3.4 + 4) * sz;
+        ctx.save(); ctx.translate(J[i].x, J[i].y); ctx.rotate(Math.atan2(dy, dx)); ctx.lineWidth = 1;
+        ctx.globalAlpha = .2; ctx.strokeRect(0, -th / 2, len, th); ctx.globalAlpha = .1; ctx.strokeRect(2, -th * .325, Math.max(0, len - 4), th * .65);
+        ctx.beginPath(); for (let rx = 5; rx < len - 3; rx += 5.5) { ctx.moveTo(rx, -th / 2); ctx.lineTo(rx, th / 2); } ctx.globalAlpha = .16; ctx.stroke(); ctx.restore();
+      }
+    } else if (g.hull === 'stepped-boxes') {
+      for (let i = 0; i < n; i++) {
+        const len = Math.hypot(J[i + 1].x - J[i].x, J[i + 1].y - J[i].y), ang = Math.atan2(J[i + 1].y - J[i].y, J[i + 1].x - J[i].x);
+        for (let s = 0; s < 3; s++) {
+          const tt = (s + .5) / 3, bw = len / 3 * .85, bh = ((n - i) * 3.5 + 3) * sz;
+          ctx.save(); ctx.translate(lerp(J[i].x, J[i + 1].x, tt), lerp(J[i].y, J[i + 1].y, tt)); ctx.rotate(ang);
+          ctx.strokeStyle = '#fff'; ctx.globalAlpha = .16; ctx.lineWidth = 1; ctx.strokeRect(-bw / 2, -bh / 2, bw, bh); ctx.restore();
+        }
+      }
+    } else if (g.hull === 'web-truss' && n >= 3) {
+      ctx.beginPath(); ctx.moveTo(J[0].x, J[0].y); ctx.lineTo(J[2].x, J[2].y);
+      if (J[3]) { ctx.moveTo(J[1].x, J[1].y); ctx.lineTo(J[3].x, J[3].y); }
+      ctx.strokeStyle = g.secondary; ctx.lineWidth = 1.25; ctx.globalAlpha = .65; ctx.stroke();
+    } else if (g.hull === 'double-rail') {
+      for (let i = 0; i < n; i++) {
+        const a = Math.atan2(J[i + 1].y - J[i].y, J[i + 1].x - J[i].x), nx = -Math.sin(a) * 2.4 * sz, ny = Math.cos(a) * 2.4 * sz;
+        ctx.beginPath(); ctx.moveTo(J[i].x + nx, J[i].y + ny); ctx.lineTo(J[i + 1].x + nx, J[i + 1].y + ny); ctx.moveTo(J[i].x - nx, J[i].y - ny); ctx.lineTo(J[i + 1].x - nx, J[i + 1].y - ny);
+        ctx.strokeStyle = g.secondary; ctx.lineWidth = 1.2; ctx.globalAlpha = .75; ctx.stroke();
+      }
+    } else if (g.hull === 'wire-skeleton') {
+      for (let i = 1; i < n; i++) { ctx.strokeStyle = '#fff'; ctx.globalAlpha = .35; ctx.strokeRect(J[i].x - 3, J[i].y - 3, 6, 6); }
+    }
+    ctx.restore();
+  }
+  selection(c, t) {
+    const ctx = this.ctx, ce = c.center, r = c.radius + c.segLen * c.segments.length * .25;
+    ctx.save(); ctx.translate(ce.x, ce.y); ctx.rotate(t * .0004); ctx.strokeStyle = c.g.accent; ctx.globalAlpha = .38; ctx.lineWidth = 1.2; ctx.setLineDash([4, 7]);
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke(); ctx.restore();
+  }
+}
+
+// ---------------------------------------------------------------------------- backdrops
+/** A swappable ground. It paints the background, can react to footfalls and scares, and may keep its own state. */
+class Backdrop {
+  constructor(world) { this.w = world; }
+  resize() {}
+  update() {}
+  draw(ctx) { ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, this.w.width, this.w.height); }
+  drawTop() {}
+  onFootfall() {}
+  onScare() {}
+}
+class GridBackdrop extends Backdrop {
+  constructor(world) { super(world); this.cache = document.createElement('canvas'); }
+  resize() {
+    const w = this.w, gc = this.cache; gc.width = w.canvas.width; gc.height = w.canvas.height;
+    const g = gc.getContext('2d'); g.setTransform(w.dpr, 0, 0, w.dpr, 0, 0);
+    const S = 90; g.strokeStyle = 'rgba(255,255,255,.03)'; g.lineWidth = 1; g.beginPath();
+    for (let x = 0; x < w.width; x += S) { g.moveTo(x + .5, 0); g.lineTo(x + .5, w.height); }
+    for (let y = 0; y < w.height; y += S) { g.moveTo(0, y + .5); g.lineTo(w.width, y + .5); }
+    g.stroke(); g.strokeStyle = 'rgba(255,255,255,.06)'; g.beginPath();
+    for (let x = S; x < w.width; x += S) for (let y = S; y < w.height; y += S) { g.moveTo(x - 3, y); g.lineTo(x + 3, y); g.moveTo(x, y - 3); g.lineTo(x, y + 3); }
+    g.stroke();
+  }
+  draw(ctx) {
+    super.draw(ctx);
+    if (this.w.view.grid) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(this.cache, 0, 0); ctx.setTransform(this.w.dpr, 0, 0, this.w.dpr, 0, 0); }
+  }
+}
+
+/** Bioluminescent water: a wave simulation. Every footfall rings the surface in that creature's colour. */
+class WaterBackdrop extends Backdrop {
+  constructor(world) { super(world); this.drip = 60; }
+  resize() {
+    const w = this.w, c = this.cell = Math.max(4, Math.sqrt(w.width * w.height / 70000));
+    this.gw = Math.ceil(w.width / c) + 1; this.gh = Math.ceil(w.height / c) + 1; const n = this.gw * this.gh;
+    this.h = new Float32Array(n); this.v = new Float32Array(n);
+    this.tr = new Float32Array(n).fill(.1); this.tg = new Float32Array(n).fill(.75); this.tb = new Float32Array(n).fill(.95);
+    this.cv = document.createElement('canvas'); this.cv.width = this.gw; this.cv.height = this.gh; this.cx = this.cv.getContext('2d');
+    this.img = this.cx.createImageData(this.gw, this.gh); for (let i = 3; i < this.img.data.length; i += 4) this.img.data[i] = 255;
+  }
+  splash(x, y, amt, rgb) {
+    const gx = x / this.cell | 0, gy = y / this.cell | 0;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const X = gx + dx, Y = gy + dy; if (X < 1 || Y < 1 || X >= this.gw - 1 || Y >= this.gh - 1) continue;
+      const i = Y * this.gw + X, k = Math.exp(-(dx * dx + dy * dy) / 2.2);   // soft gaussian dent, not a hard pixel
+      this.h[i] -= amt * k; this.tr[i] = lerp(this.tr[i], rgb[0], .5 * k); this.tg[i] = lerp(this.tg[i], rgb[1], .5 * k); this.tb[i] = lerp(this.tb[i], rgb[2], .5 * k);
+    }
+  }
+  static rgb(hex) { return [parseInt(hex.slice(1, 3), 16) / 255, parseInt(hex.slice(3, 5), 16) / 255, parseInt(hex.slice(5, 7), 16) / 255]; }
+  onFootfall(c, leg) { this.splash(leg.footX, leg.footY, 3, WaterBackdrop.rgb(c.g.accent)); }
+  onScare(x, y) { this.splash(x, y, 14, [1, .2, .4]); }
+  update() {
+    const { gw, gh, h, v } = this, w = this.w;
+    for (const c of w.creatures) if (c.speed > .8) this.splash(c.head.x, c.head.y, .18, WaterBackdrop.rgb(c.g.primary));
+    if (--this.drip <= 0) { this.drip = 70 + Math.random() * 110; this.splash(rand(0, w.width), rand(0, w.height), 1.6, [.1, .75, .95]); }   // gentle rain so it never goes dead
+    for (let y = 1; y < gh - 1; y++) for (let x = 1; x < gw - 1; x++) { const i = y * gw + x; v[i] += (h[i - 1] + h[i + 1] + h[i - gw] + h[i + gw] - 4 * h[i]) * .22 - (v[i] - (v[i - 1] + v[i + 1] + v[i - gw] + v[i + gw]) * .25) * .12; v[i] *= .985; }
+    for (let i = 0; i < h.length; i++) h[i] = (h[i] + v[i]) * .9993;
+  }
+  draw(ctx) {
+    const { gw, gh, h } = this, d = this.img.data, w = this.w;
+    for (let y = 1; y < gh - 1; y++) for (let x = 1; x < gw - 1; x++) {
+      const i = y * gw + x, o = i * 4, sl = h[i + 1] - h[i - 1] + h[i + gw] - h[i - gw];
+      const I = Math.min(1, Math.abs(h[i]) * .26 + Math.max(0, sl) * .1), sp = Math.max(0, sl - 2.2) * .08;
+      d[o] = Math.min(255, 3 + I * this.tr[i] * 255 + sp * 255); d[o + 1] = Math.min(255, 9 + I * this.tg[i] * 255 + sp * 255); d[o + 2] = Math.min(255, 20 + I * this.tb[i] * 255 + sp * 255);
+    }
+    this.cx.putImageData(this.img, 0, 0); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(this.cv, 0, 0, w.width, w.height);
+    const g = ctx.createRadialGradient(w.width / 2, w.height / 2, Math.min(w.width, w.height) * .35, w.width / 2, w.height / 2, Math.max(w.width, w.height) * .8);
+    g.addColorStop(0, 'rgba(2,5,12,0)'); g.addColorStop(1, 'rgba(2,5,12,.55)'); ctx.fillStyle = g; ctx.fillRect(0, 0, w.width, w.height);
+  }
+}
+const BACKDROPS = { water: WaterBackdrop, grid: GridBackdrop };
+
+// ---------------------------------------------------------------------------- world
+class World {
+  constructor(canvas) {
+    this.canvas = canvas; this.ctx = canvas.getContext('2d');
+    this.creatures = []; this.selected = null;
+    this.guidances = { cursor: new CursorGuidance(), path: new PathGuidance(), orbit: new OrbitGuidance(), roam: new RoamGuidance() };
+    this.guidance = this.guidances.cursor;
+    this.flock = new Flock(); this.sfx = new Sfx(); this.renderer = new Renderer(this.ctx);
+    this.waypoints = []; this.beacon = null; this.beaconId = 0; this.repel = null;
+    this.ripples = []; this.prints = [];
+    this.pointer = { x: 0, y: 0, active: false, down: false };
+    this.view = { hulls: true, reticles: false, tethers: false, footprints: false, paths: true, grid: true, labels: true };
+    this.settings = { simSpeed: 1, variation: .15, scareRadius: 360 };
+    this.t = 0; this.acc = 0; this.last = 0; this.width = 0; this.height = 0; this.dpr = 1; this.listeners = [];
+    this.paused = false; this.backdropId = 'water'; this.backdrop = new WaterBackdrop(this);
+    addEventListener('resize', () => this.resize()); this.resize();
+  }
+  on(fn) { this.listeners.push(fn); }
+  emit(type) { for (const f of this.listeners) f(type); }
+
+  resize() {
+    this.dpr = Math.min(devicePixelRatio || 1, 2); this.width = innerWidth; this.height = innerHeight;
+    this.canvas.width = Math.round(this.width * this.dpr); this.canvas.height = Math.round(this.height * this.dpr);
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.backdrop.resize();
+  }
+
+  // ---- population
+  add(genome, x, y) {
+    if (this.creatures.length >= 12) return null;
+    const c = new Creature(genome, x ?? rand(this.width * .25, this.width * .75), y ?? rand(this.height * .25, this.height * .75));
+    this.creatures.push(c); this.ripples.push({ x: c.head.x, y: c.head.y, r: 8, max: 80, a: .9, color: genome.primary });
+    this.select(c); this.emit('population'); return c;
+  }
+  remove(c) {
+    const i = this.creatures.indexOf(c); if (i < 0) return;
+    this.creatures.splice(i, 1);
+    if (this.selected === c) this.select(this.creatures[Math.min(i, this.creatures.length - 1)] || null);
+    this.emit('population');
+  }
+  select(c) { this.selected = c; this.emit('select'); }
+  setBackdrop(id) { if (!BACKDROPS[id]) return; this.backdropId = id; this.backdrop = new BACKDROPS[id](this); this.backdrop.resize(); this.emit('backdrop'); }
+  setGuidance(id) { this.guidance = this.guidances[id]; this.beacon = null; this.emit('guidance'); }
+  pick(x, y) {
+    for (let i = this.creatures.length - 1; i >= 0; i--) {
+      const c = this.creatures[i];
+      for (const s of c.segments) if (Math.hypot(x - s.x, y - s.y) < Math.max(s.width * .75, 22)) return c;
+    }
+    return null;
+  }
+
+  // ---- decisions
+  targetFor(c) {
+    const r = this.repel;
+    if (r) { const hd = c.head, d = Math.hypot(hd.x - r.x, hd.y - r.y); if (d < this.settings.scareRadius) { const k = d || 1; return { x: hd.x + (hd.x - r.x) / k * 180, y: hd.y + (hd.y - r.y) / k * 180, type: 'repel' }; } }
+    const b = this.beacon;
+    if (b && c.beaconDone !== b.id) {
+      if (Math.hypot(c.head.x - b.x, c.head.y - b.y) < 30 + c.radius * .5 + c.arrive * .5) c.beaconDone = b.id; else return { x: b.x, y: b.y, type: 'beacon' };
+    }
+    return this.guidance.target(c, this);
+  }
+  /** A short, still click or tap on empty ground. */
+  tap(x, y) {
+    const col = this.selected ? this.selected.g.accent : '#3dffc8';
+    if (this.guidance.id === 'path') { if (this.waypoints.length < 12) this.waypoints.push({ x, y }); this.ripples.push({ x, y, r: 4, max: 48, a: .95, color: col }); }
+    else { this.beacon = { x, y, id: ++this.beaconId }; this.ripples.push({ x, y, r: 4, max: 60, a: .95, color: col }); }
+    this.sfx.chirp(true);
+  }
+  startScare(x, y) { this.backdrop.onScare(x, y); this.repel = { x, y }; this.ripples.push({ x, y, r: 8, max: 130, a: .9, color: '#ff3366' }); this.sfx.chirp(false); }
+  clearPath() { this.waypoints = []; this.beacon = null; this.prints = []; this.creatures.forEach(c => c.pathIdx = 0); }
+  onFootfall(c, leg) {
+    if (this.view.footprints) { this.prints.push({ x: leg.footX, y: leg.footY, a: c.segments[leg.segIndex].angle, al: .5, color: c.g.accent, circle: c.g.reticle === 'circle' }); if (this.prints.length > 160) this.prints.shift(); }
+    this.backdrop.onFootfall(c, leg); this.sfx.step(c, leg, leg.footX, this.width);
+  }
+
+  // ---- loop
+  start() { requestAnimationFrame(ts => { this.last = ts; this.loop(ts); }); }
+  loop(ts) {
+    const dt = Math.min(ts - this.last, 60); this.last = ts;
+    this.acc += this.paused ? 0 : dt * this.settings.simSpeed; let n = 0;
+    while (this.acc >= 16.667 && n++ < 5) { this.acc -= 16.667; this.step(); }
+    if (n >= 5) this.acc = 0;
+    this.draw();
+    requestAnimationFrame(t => this.loop(t));
+  }
+  step() {
+    this.t += 16.667;
+    for (const c of this.creatures) c.update(this, this.t);
+    this.backdrop.update();
+    for (let i = this.ripples.length - 1; i >= 0; i--) { const r = this.ripples[i]; r.r += (r.max - r.r) * .12; r.a -= .026; if (r.a < .02) this.ripples.splice(i, 1); }
+    for (let i = this.prints.length - 1; i >= 0; i--) { this.prints[i].al -= .0035; if (this.prints[i].al < .01) this.prints.splice(i, 1); }
+  }
+  draw() {
+    const ctx = this.ctx, t = this.t;
+    ctx.globalAlpha = 1; this.backdrop.draw(ctx, t); ctx.globalAlpha = 1;
+    for (const p of this.prints) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.strokeStyle = p.color; ctx.globalAlpha = p.al; ctx.lineWidth = 1; if (p.circle) { ctx.beginPath(); ctx.arc(0, 0, 3.2, 0, TAU); ctx.stroke(); } else ctx.strokeRect(-3, -3, 6, 6); ctx.restore(); }
+    for (const r of this.ripples) { ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, TAU); ctx.strokeStyle = r.color; ctx.globalAlpha = r.a; ctx.lineWidth = 1.6; ctx.stroke(); }
+    ctx.globalAlpha = 1;
+    this.drawGuides(t);
+    for (const c of this.creatures) { if (c === this.selected && this.creatures.length > 1) this.renderer.selection(c, t); this.renderer.creature(c, this.view, t); }
+    this.backdrop.drawTop(ctx, t);
+    if (this.view.labels && this.creatures.length > 1) this.drawLabels(ctx);
+    if (this.repel) { ctx.beginPath(); ctx.arc(this.repel.x, this.repel.y, this.settings.scareRadius, 0, TAU); ctx.strokeStyle = '#ff3366'; ctx.globalAlpha = .18; ctx.setLineDash([3, 8]); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
+  }
+  drawLabels(ctx) {
+    ctx.save(); ctx.font = '500 10.5px ui-monospace, Menlo, Consolas, monospace'; ctx.textAlign = 'center';
+    for (const c of this.creatures) {
+      const hd = c.head, sel = c === this.selected, y = hd.y - c.radius * .55 - 12;
+      ctx.globalAlpha = sel ? .9 : .4; ctx.fillStyle = sel ? c.g.accent : '#fff'; ctx.fillText(c.g.name, hd.x, y);
+    }
+    ctx.restore();
+  }
+  drawGuides(t) {
+    if (!this.view.paths) return;
+    const ctx = this.ctx, accent = this.selected ? this.selected.g.accent : '#3dffc8', P = this.waypoints;
+    if (this.guidance.id === 'path' && P.length) {
+      ctx.save(); ctx.beginPath(); P.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); if (P.length > 2) ctx.closePath();
+      ctx.strokeStyle = accent; ctx.globalAlpha = .4; ctx.lineWidth = 1.3; ctx.setLineDash([5, 6]); ctx.lineDashOffset = -t * .04; ctx.stroke(); ctx.restore();
+      P.forEach((p, i) => { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(t * .002 * (i % 2 ? -1 : 1)); ctx.strokeStyle = accent; ctx.globalAlpha = .75; ctx.lineWidth = 1.3; ctx.strokeRect(-7, -7, 14, 14); ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(0, 0, 2.4, 0, TAU); ctx.fill(); ctx.restore(); });
+    }
+    if (this.beacon) { const b = this.beacon; ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(t * .003); ctx.strokeStyle = accent; ctx.globalAlpha = .8; ctx.lineWidth = 1.3; ctx.strokeRect(-9, -9, 18, 18); ctx.restore(); }
+    if (this.guidance.id === 'cursor' && this.pointer.active) {
+      const p = this.pointer; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(-t * .002); ctx.strokeStyle = accent; ctx.globalAlpha = .55; ctx.lineWidth = 1.2; ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.arc(0, 0, 10, 0, TAU); ctx.stroke(); ctx.restore();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------- input
+class Input {
+  constructor(world) {
+    this.w = world; this.hold = null; this.down = null; this.grab = null; this.ui = null; this.canHover = matchMedia('(hover: hover)').matches;
+    const cv = world.canvas;
+    cv.addEventListener('contextmenu', e => e.preventDefault());
+    cv.addEventListener('pointerdown', e => this.onDown(e));
+    cv.addEventListener('pointermove', e => this.onMove(e));
+    addEventListener('pointerup', e => this.onUp(e)); addEventListener('pointercancel', e => this.onUp(e));
+    addEventListener('blur', () => this.release());
+    addEventListener('keydown', e => this.onKey(e));
+  }
+  onDown(e) {
+    const w = this.w, p = w.pointer; p.x = e.clientX; p.y = e.clientY; p.active = true; p.down = true;
+    w.canvas.setPointerCapture?.(e.pointerId);
+    if (e.button === 2) { w.startScare(e.clientX, e.clientY); this.down = { moved: true, fired: true }; return; }
+    let g = w.pick(e.clientX, e.clientY);
+    if (!g && e.shiftKey) { let best = 1e9; for (const c of w.creatures) { const d = Math.hypot(c.head.x - e.clientX, c.head.y - e.clientY); if (d < best) { best = d; g = c; } } }
+    this.down = { x: e.clientX, y: e.clientY, moved: false, fired: false, grab: g };
+    if (g) { this.grab = g; g.grabbed = true; g.grabX = e.clientX; g.grabY = e.clientY; w.select(g); }
+    else this.hold = setTimeout(() => { if (this.down && !this.down.moved) { this.down.fired = true; w.startScare(w.pointer.x, w.pointer.y); } }, 480);
+  }
+  onMove(e) {
+    const w = this.w, p = w.pointer;
+    if (!p.down && !(e.pointerType === 'mouse' && this.canHover)) return;   // touch / pen only steer while pressed
+    p.x = e.clientX; p.y = e.clientY; p.active = true;
+    if (w.repel) { w.repel.x = e.clientX; w.repel.y = e.clientY; }
+    if (this.grab) { this.grab.grabX = e.clientX; this.grab.grabY = e.clientY; }
+    if (this.down && !this.down.moved && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 10) { this.down.moved = true; clearTimeout(this.hold); }
+    if (e.pointerType === 'mouse' && !p.down) w.canvas.style.cursor = w.pick(e.clientX, e.clientY) ? 'grab' : 'crosshair';
+  }
+  onUp(e) {
+    const w = this.w, d = this.down; clearTimeout(this.hold); w.pointer.down = false;
+    const wasScare = !!w.repel; w.repel = null;
+    if (this.grab) { this.grab.grabbed = false; this.grab = null; }
+    if (d && !d.moved && !d.fired && !d.grab && !wasScare && e.type === 'pointerup') w.tap(e.clientX, e.clientY);
+    this.down = null;
+  }
+  release() { clearTimeout(this.hold); this.w.repel = null; this.w.pointer.down = false; if (this.grab) { this.grab.grabbed = false; this.grab = null; } this.down = null; }
+  onKey(e) {
+    const el = document.activeElement, tag = el ? el.tagName : '';
+    if (tag === 'TEXTAREA' || tag === 'SELECT' || (tag === 'INPUT' && el.type !== 'range' && el.type !== 'checkbox')) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const w = this.w, ui = this.ui;
+    switch (e.code) {
+      case 'Space': e.preventDefault(); ui.mutate(); break;
+      case 'KeyA': ui.addRandom(); break;
+      case 'Delete': case 'Backspace': if (w.selected && w.creatures.length > 1) w.remove(w.selected); break;
+      case 'KeyC': case 'Escape': w.clearPath(); break;
+      case 'KeyF': ui.setFlock(!w.flock.enabled); break;
+      case 'KeyM': ui.setSound(!w.sfx.enabled); break;
+      case 'KeyE': ui.togglePanel(); break;
+      case 'Digit1': w.setGuidance('cursor'); break; case 'Digit2': w.setGuidance('path'); break; case 'Digit3': w.setGuidance('orbit'); break; case 'Digit4': w.setGuidance('roam'); break;
+      case 'KeyP': ui.setPaused(!w.paused); break;
+      case 'Tab': if (w.creatures.length) { e.preventDefault(); const i = w.creatures.indexOf(w.selected); w.select(w.creatures[(i + (e.shiftKey ? -1 : 1) + w.creatures.length) % w.creatures.length]); } break;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------- persistence
+const Store = {
+  key: 'ik9109.v2',
+  save(w) { try { localStorage.setItem(this.key, JSON.stringify({ g: w.creatures.map(c => c.g), sel: w.creatures.indexOf(w.selected), guidance: w.guidance.id, backdrop: w.backdropId, flock: w.flock, view: w.view, settings: w.settings, volume: w.sfx.volume })); } catch (_) {} },
+  load() { try { return JSON.parse(localStorage.getItem(this.key) || 'null'); } catch (_) { return null; } },
+  clear() { try { localStorage.removeItem(this.key); } catch (_) {} },
+  loadLib() { try { const a = JSON.parse(localStorage.getItem('ik9109.lib') || '[]'); return Array.isArray(a) ? a.slice(0, 12) : []; } catch (_) { return []; } },
+  saveLib(a) { try { localStorage.setItem('ik9109.lib', JSON.stringify(a)); } catch (_) {} }
+};
+
+// ---------------------------------------------------------------------------- UI
+class UI {
+  constructor(world) {
+    this.w = world; this.updaters = []; this.saveTimer = 0; this.whoPaint = () => {};
+    this.dock = document.getElementById('dock'); this.panel = document.getElementById('panel');
+    this.hint = document.getElementById('hint'); this.toastEl = document.getElementById('toast');
+    this.touch = matchMedia('(pointer: coarse)').matches;
+    this.buildDock(); this.buildPanel();
+    world.on(type => this.onWorld(type));
+  }
+  get sel() { return this.w.selected; }
+  toast(msg) { this.toastEl.textContent = msg; this.toastEl.classList.add('on'); clearTimeout(this._t); this._t = setTimeout(() => this.toastEl.classList.remove('on'), 1600); }
+  queueSave() { clearTimeout(this.saveTimer); this.saveTimer = setTimeout(() => Store.save(this.w), 400); }
+  togglePanel(force) { const on = document.body.classList.toggle('open', force); this.editBtn.classList.toggle('on', on); }
+  refresh() { this.updaters.forEach(f => f()); }
+
+  onWorld(type) {
+    const w = this.w, c = w.selected;
+    if (type === 'guidance') {
+      this.segBtns.forEach(b => b.classList.toggle('on', b.dataset.id === w.guidance.id));
+      this.hint.innerHTML = this.touch ? w.guidance.touchHint : w.guidance.hint; this.hint.style.opacity = 1;
+      clearTimeout(this._h); this._h = setTimeout(() => this.hint.style.opacity = 0, 7000);
+      document.getElementById('brandCount').textContent = w.creatures.length + (w.creatures.length === 1 ? ' creature' : ' creatures') + ' · ' + w.guidance.label.toLowerCase();
+      this.queueSave();
+    }
+    if (type === 'backdrop') { this.refresh(); this.queueSave(); }
+    if (type === 'population') {
+      this.countEl.textContent = w.creatures.length;
+      document.getElementById('brandCount').textContent = w.creatures.length + (w.creatures.length === 1 ? ' creature' : ' creatures') + ' · ' + w.guidance.label.toLowerCase();
+      this.queueSave();
+    }
+    if (type === 'select' || type === 'population') {
+      if (c) document.documentElement.style.setProperty('--acc', c.g.accent);
+      this.refresh();
+    }
+  }
+  setPaused(on) { this.w.paused = on; this.pauseBtn.classList.toggle('on', on); this.pauseBtn.innerHTML = svg(on ? 'play' : 'pause'); this.toast(on ? 'Paused' : 'Running'); }
+  setFlock(on) { this.w.flock.enabled = on; this.flockBtn.classList.toggle('on', on); this.refresh(); this.queueSave(); this.toast(on ? 'Flocking on' : 'Flocking off'); }
+  setSound(on) { const v = this.w.sfx.set(on); this.soundBtn.classList.toggle('on', v); this.soundBtn.innerHTML = svg(v ? 'sound' : 'mute'); this.refresh(); if (v) this.w.sfx.chirp(true); this.queueSave(); }
+  addRandom() { const w = this.w; if (w.creatures.length >= 12) return this.toast('That is the limit: 12'); const base = w.selected ? w.selected.g : Genome.preset(PRESET_NAMES[0]); w.add(base.variant(w.settings.variation)); }
+  addSpecies(name) { const w = this.w; if (w.creatures.length >= 12) return this.toast('That is the limit: 12'); w.add(Genome.preset(name).variant(w.settings.variation * .6)); }
+  mutate() { const c = this.sel; if (!c) return; c.g.randomize(); c.rebuild(); this.w.ripples.push({ x: c.head.x, y: c.head.y, r: 10, max: 90, a: .95, color: c.g.primary }); this.w.sfx.chirp(true); this.w.emit('select'); this.queueSave(); }
+  applyGenome(g) { const c = this.sel; if (!c) return; c.g = g; c.rebuild(); this.w.emit('select'); this.queueSave(); }
+
+  slider(label, min, max, step, get, set, { fmt, def } = {}) {
+    const input = h('input', { type: 'range', min, max, step }), out = h('output');
+    const paint = () => { const v = get(); input.value = v; out.textContent = fmt ? fmt(v) : v.toFixed((String(step).split('.')[1] || '').length); input.style.setProperty('--p', ((v - min) / (max - min) * 100) + '%'); };
+    input.addEventListener('input', () => { set(+input.value); paint(); this.queueSave(); });
+    if (def != null) { out.title = 'Double-click to reset'; out.addEventListener('dblclick', () => { set(def); paint(); this.queueSave(); }); }
+    this.updaters.push(paint);
+    return h('label', { class: 'sl' }, h('span', {}, label), out, input);
+  }
+  toggle(label, sub, get, set) {
+    const sw = h('span', { class: 'sw2' }), row = h('button', { class: 'row' }, h('span', {}, label, sub ? h('small', {}, sub) : null), sw);
+    const paint = () => sw.classList.toggle('on', !!get());
+    row.addEventListener('click', () => { set(!get()); paint(); this.queueSave(); });
+    this.updaters.push(paint); return row;
+  }
+  section(title, open, ...kids) { return h('details', { class: 'sec', open }, h('summary', {}, title), ...kids); }
+
+  buildDock() {
+    const w = this.w;
+    this.segBtns = Object.values(w.guidances).map(g => h('button', { 'data-id': g.id, onclick: () => w.setGuidance(g.id) }, g.label));
+    this.countEl = h('span', { class: 'count' });
+    this.flockBtn = h('button', { class: 'ibtn on', title: 'Flocking [F]', 'aria-label': 'Toggle flocking', onclick: () => this.setFlock(!w.flock.enabled) }, icon('flock'));
+    this.soundBtn = h('button', { class: 'ibtn', title: 'Footstep sounds [M]', 'aria-label': 'Toggle sound', onclick: () => this.setSound(!w.sfx.enabled), html: svg('mute') });
+    this.pauseBtn = h('button', { class: 'ibtn', title: 'Pause [P]', 'aria-label': 'Pause or resume', onclick: () => this.setPaused(!w.paused), html: svg('pause') });
+    this.editBtn = h('button', { class: 'ibtn', title: 'Customize [E]', 'aria-label': 'Open customize panel', onclick: () => this.togglePanel() }, icon('sliders'));
+    const remove = () => { if (w.creatures.length > 1) w.remove(w.selected); else this.toast('Keep at least one'); };
+    this.dock.append(
+      h('div', { class: 'seg', role: 'group', 'aria-label': 'Guidance' }, this.segBtns),
+      h('div', { class: 'grp' }, this.flockBtn),
+      h('div', { class: 'sep' }),
+      h('div', { class: 'grp' },
+        h('button', { class: 'ibtn', 'aria-label': 'Remove creature', title: 'Remove selected [Del]', onclick: remove }, icon('minus')),
+        this.countEl,
+        h('button', { class: 'ibtn', 'aria-label': 'Add creature', title: 'Add one [A]', onclick: () => this.addRandom() }, icon('plus'))),
+      h('div', { class: 'sep' }),
+      h('div', { class: 'grp' }, this.pauseBtn, this.soundBtn, this.editBtn));
+    this.removeSel = remove;
+  }
+
+  buildPanel() {
+    const w = this.w, tabs = { creature: h('div', { class: 'tab on' }), herd: h('div', { class: 'tab' }), view: h('div', { class: 'tab' }) };
+    const tabBtns = Object.keys(tabs).map(k => h('button', { 'data-t': k, class: k === 'creature' ? 'on' : '', onclick: () => { Object.entries(tabs).forEach(([n, el]) => el.classList.toggle('on', n === k)); tabBtns.forEach(b => b.classList.toggle('on', b.dataset.t === k)); } }, k[0].toUpperCase() + k.slice(1)));
+    this.panel.append(h('header', {}, h('div', { class: 'seg' }, tabBtns), h('button', { class: 'ibtn', 'aria-label': 'Close', onclick: () => this.togglePanel(false) }, icon('close'))), h('div', { class: 'body' }, tabs.creature, tabs.herd, tabs.view));
+
+    // ===== Creature
+    const who = h('div', { class: 'who' }, h('div', { class: 'sw' }), h('div', {}, h('b'), h('span')));
+    this.whoPaint = () => { const c = this.sel; if (!c) return; who.firstChild.style.cssText = `--c1:${c.g.primary};--c2:${c.g.secondary}`; who.querySelector('b').textContent = c.g.name; who.querySelector('span').textContent = `${c.legs.length} legs · ${c.segments.length} segment${c.segments.length > 1 ? 's' : ''} · ${w.creatures.indexOf(c) + 1} of ${w.creatures.length}`; if (this.rosterPaint) this.rosterPaint(); };
+    this.updaters.push(this.whoPaint);
+    const chips = h('div', { class: 'chips' }, PRESET_NAMES.map(n => h('button', { class: 'chip', 'data-n': n, style: `--d:${PRESETS[n].primary}`, onclick: () => this.applyGenome(Genome.preset(n)) }, h('i'), n)));
+    this.updaters.push(() => chips.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', !!this.sel && this.sel.g.name === b.dataset.n)));
+    this.lib = Store.loadLib();
+    const libCap = h('h4', { class: 'cap' }, 'My creatures'), libRow = h('div', { class: 'chips' });
+    const paintLib = () => {
+      libCap.style.display = libRow.style.display = this.lib.length ? '' : 'none';
+      libRow.replaceChildren(...this.lib.map((o, i) => h('span', { class: 'chip', style: `--d:${o.primary}` }, h('i'), h('button', { onclick: () => this.applyGenome(Genome.fromJSON(o)) }, o.name),
+        h('button', { class: 'x', 'aria-label': 'Delete saved creature', onclick: () => { this.lib.splice(i, 1); Store.saveLib(this.lib); paintLib(); } }, '×'))));
+    };
+    this.saveToLib = () => { const c = this.sel; if (!c) return; if (this.lib.length >= 12) return this.toast('Library is full (12)'); const o = JSON.parse(JSON.stringify(c.g)); o.name = c.g.name.replace(' · edited', '') + ' ★'; o.base = null; this.lib.push(o); Store.saveLib(this.lib); paintLib(); this.toast('Saved to My creatures'); };
+    paintLib();
+    tabs.creature.append(who, chips, libCap, libRow);
+    for (const group of ['Body', 'Legs', 'Gait']) {
+      tabs.creature.append(this.section(group, group === 'Body', ...SPECS.filter(s => s.group === group).map(s => this.slider(s.label, s.min, s.max, s.step,
+        () => this.sel ? this.sel.g[s.key] : s.def,
+        v => { const c = this.sel; if (!c) return; c.g.set(s.key, v); if (!s.live) c.rebuild(); this.whoPaint(); },
+        { fmt: s.fmt, def: s.def }))));
+    }
+    const colors = h('div', { class: 'colors' }, COLORS.map(k => {
+      const inp = h('input', { type: 'color', 'aria-label': k + ' colour' });
+      inp.addEventListener('input', () => { const c = this.sel; if (!c) return; c.g.set(k, inp.value); document.documentElement.style.setProperty('--acc', c.g.accent); this.whoPaint(); this.queueSave(); });
+      this.updaters.push(() => { if (this.sel) inp.value = this.sel.g[k]; });
+      return h('label', {}, inp, k);
+    }));
+    const pick = (label, key, list) => {
+      const s = h('select', {}, list.map(o => h('option', { value: o }, o.replace(/-/g, ' '))));
+      s.addEventListener('change', () => { const c = this.sel; if (!c) return; c.g.set(key, s.value); this.whoPaint(); this.queueSave(); });
+      this.updaters.push(() => { if (this.sel) s.value = this.sel.g[key]; });
+      return h('label', {}, label, s);
+    };
+    tabs.creature.append(this.section('Look', true, colors, h('div', { class: 'pair' }, pick('Foot targets', 'reticle', RETICLES), pick('Leg armour', 'hull', HULLS))));
+    const share = h('textarea', { spellcheck: 'false', placeholder: 'Genome JSON' });
+    tabs.creature.append(
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn pri', onclick: () => this.mutate() }, icon('dice'), 'Randomize'),
+        h('button', { class: 'btn', onclick: () => { const c = this.sel; if (c && c.g.base) this.applyGenome(Genome.preset(c.g.base)); else this.toast('Pick a species above'); } }, icon('reset'), 'Reset'),
+        h('button', { class: 'btn', onclick: () => { const c = this.sel; if (!c) return; for (const o of w.creatures) if (o !== c) { o.g = c.g.clone(); o.rebuild(); } this.toast('Applied to all'); this.refresh(); this.queueSave(); } }, 'Apply to all'),
+        h('button', { class: 'btn', onclick: () => { const c = this.sel; if (c) w.add(c.g.clone().variant(.05)); } }, icon('copy'), 'Duplicate'),
+        h('button', { class: 'btn', onclick: () => this.saveToLib() }, icon('copy'), 'Save'),
+        h('button', { class: 'btn danger', onclick: () => this.removeSel() }, icon('trash'), 'Remove')),
+      this.section('Import / export', false, share, h('div', { class: 'btns' },
+        h('button', { class: 'btn', onclick: () => { share.value = JSON.stringify(this.sel.g); share.select(); if (navigator.clipboard) navigator.clipboard.writeText(share.value).then(() => this.toast('Copied genome'), () => this.toast('Copy the text from the box')); } }, 'Export'),
+        h('button', { class: 'btn', onclick: () => { try { this.applyGenome(Genome.fromJSON(JSON.parse(share.value))); this.toast('Genome applied'); } catch (_) { this.toast('That is not valid genome JSON'); } } }, 'Import'))));
+
+    // ===== Herd
+    const note = h('p', { class: 'note' });
+    note.innerHTML = this.touch ? 'Drag a creature to carry it · tap one to edit it · hold on empty ground to scare them.' : 'Drag a creature to carry it · click one to edit it · right-click or hold to scare.<br>Keys: <kbd>1</kbd>–<kbd>4</kbd> guidance · <kbd>P</kbd> pause · <kbd>A</kbd> add · <kbd>F</kbd> flock · <kbd>Tab</kbd> next · <kbd>Space</kbd> mutate · <kbd>E</kbd> this panel';
+    const roster = h('div', { class: 'roster' });
+    this.rosterPaint = () => roster.replaceChildren(...w.creatures.map(c => h('div', { class: 'ro' + (c === this.sel ? ' on' : ''), onclick: () => { w.select(c); } },
+      h('i', { style: `background:linear-gradient(135deg,${c.g.primary},${c.g.secondary})` }), h('span', {}, c.g.name), h('small', {}, c.legs.length + ' legs'),
+      h('button', { class: 'x', 'aria-label': 'Remove', onclick: e => { e.stopPropagation(); if (w.creatures.length > 1) w.remove(c); } }, '×'))));
+    this.updaters.push(this.rosterPaint);
+    tabs.herd.append(
+      h('h4', { class: 'cap' }, 'Herd'), roster,
+      h('h4', { class: 'cap' }, 'Add a species'),
+      h('div', { class: 'chips' }, PRESET_NAMES.map(n => h('button', { class: 'chip', style: `--d:${PRESETS[n].primary}`, onclick: () => this.addSpecies(n) }, h('i'), n))),
+      this.slider('Population', 1, 12, 1, () => w.creatures.length, v => { while (w.creatures.length < v) this.addRandom(); while (w.creatures.length > v) w.remove(w.creatures[w.creatures.length - 1]); }, { def: 3 }),
+      this.slider('Variation in new creatures', 0, .5, .01, () => w.settings.variation, v => w.settings.variation = v, { fmt: v => Math.round(v * 100) + '%', def: .15 }),
+      h('h4', { class: 'cap' }, 'Flocking'),
+      this.toggle('Flock together', 'Alignment and cohesion between neighbours', () => w.flock.enabled, v => this.setFlock(v)),
+      this.slider('Separation', 0, 2, .05, () => w.flock.separation, v => w.flock.separation = v, { def: 1 }),
+      this.slider('Alignment', 0, 2, .05, () => w.flock.alignment, v => w.flock.alignment = v, { def: .8 }),
+      this.slider('Cohesion', 0, 2, .05, () => w.flock.cohesion, v => w.flock.cohesion = v, { def: .3 }),
+      this.slider('Neighbour radius', 80, 600, 5, () => w.flock.radius, v => w.flock.radius = v, { def: 260 }),
+      h('h4', { class: 'cap' }, 'World'),
+      this.slider('Simulation speed', .2, 2, .05, () => w.settings.simSpeed, v => w.settings.simSpeed = v, { fmt: v => v.toFixed(2) + '×', def: 1 }),
+      this.slider('Scare radius', 120, 700, 10, () => w.settings.scareRadius, v => w.settings.scareRadius = v, { def: 360 }),
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => { w.clearPath(); this.toast('Path cleared'); } }, icon('path'), 'Clear path')),
+      note);
+
+    // ===== View
+    const v = w.view;
+    const groundRow = h('div', { class: 'chips' }, [['water', 'Glowing water'], ['grid', 'Blueprint grid']].map(([id, label]) => h('button', { class: 'chip', 'data-b': id, onclick: () => w.setBackdrop(id) }, label)));
+    this.updaters.push(() => groundRow.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.b === w.backdropId)));
+    tabs.view.append(
+      h('h4', { class: 'cap' }, 'Ground'),
+      groundRow,
+      h('h4', { class: 'cap' }, 'Draw'),
+      this.toggle('Leg armour', 'Plating along each limb', () => v.hulls, x => v.hulls = x),
+      this.toggle('Foot targets', 'Where each foot wants to land', () => v.reticles, x => v.reticles = x),
+      this.toggle('Tethers', 'Elastic from target to foot', () => v.tethers, x => v.tethers = x),
+      this.toggle('Footprints', 'Fading marks where feet land', () => v.footprints, x => v.footprints = x),
+      this.toggle('Name tags', 'Label each creature', () => v.labels, x => v.labels = x),
+      this.toggle('Guides', 'Cursor ring, path and call beacon', () => v.paths, x => v.paths = x),
+      this.toggle('Grid', null, () => v.grid, x => v.grid = x),
+      h('h4', { class: 'cap' }, 'Sound'),
+      this.toggle('Footstep sounds', 'Soft, off by default', () => w.sfx.enabled, x => this.setSound(x)),
+      this.slider('Volume', 0, 1, .05, () => w.sfx.volume, x => w.sfx.volume = x, { fmt: x => Math.round(x * 100) + '%', def: .5 }),
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn', onclick: () => w.canvas.toBlob(b => { const a = h('a', { href: URL.createObjectURL(b), download: 'ik-arthropods.png' }); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); this.toast('Image saved'); }) }, icon('image'), 'Save image'),
+        h('button', { class: 'btn danger', onclick: () => { Store.clear(); location.reload(); } }, icon('reset'), 'Reset everything')));
+  }
+}
+
+// ---------------------------------------------------------------------------- boot
+const world = new World(document.getElementById('stage'));
+const input = new Input(world);
+const saved = Store.load();
+if (saved && Array.isArray(saved.g) && saved.g.length) {
+  try {
+    saved.g.slice(0, 12).forEach(o => world.add(Genome.fromJSON(o)));
+    Object.assign(world.flock, saved.flock || {}); Object.assign(world.view, saved.view || {}); Object.assign(world.settings, saved.settings || {});
+    if (world.guidances[saved.guidance]) world.guidance = world.guidances[saved.guidance];
+    if (BACKDROPS[saved.backdrop]) world.setBackdrop(saved.backdrop);
+    if (world.creatures[saved.sel]) world.select(world.creatures[saved.sel]);
+    if (typeof saved.volume === 'number') world.sfx.volume = saved.volume;
+  } catch (_) { Store.clear(); }
+}
+if (!world.creatures.length) {
+  const base = Genome.preset('Void-Arachnid');
+  for (let i = 0; i < 3; i++) world.add(i ? base.variant(.15) : base, world.width * (.35 + i * .15), world.height * (.4 + (i % 2) * .2));
+  world.select(world.creatures[0]);
+}
+world.ripples.length = 0;
+const ui = new UI(world); input.ui = ui;
+ui.flockBtn.classList.toggle('on', world.flock.enabled);
+ui.onWorld('guidance'); ui.onWorld('population'); ui.onWorld('select');
+world.start();
+window.__world = world; window.__ui = ui;    // handy for poking at it in the console
+</script>
+</body>
+</html>
